@@ -9,3 +9,9 @@ ktor:
 
 app:
   environment: local
+
+database:
+  url: ${DB_URL:jdbc:postgresql://localhost:5432/drugref}
+  user: ${DB_USER:drugref}
+  password: ${DB_PASSWORD:drugref}
+  maxPoolSize: ${DB_MAX_POOL_SIZE:10}

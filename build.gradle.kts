@@ -29,9 +29,19 @@ dependencies {
     implementation(libs.ktor.server.di)
     implementation(libs.ktor.server.config.yaml)
     implementation(libs.logback.classic)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.exposed.json)
+    implementation(libs.exposed.kotlin.datetime)
+    implementation(libs.postgresql)
+    implementation(libs.hikari)
+    implementation(libs.flyway.core)
+    implementation(libs.flyway.database.postgresql)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit.jupiter)
 }
 
 ktor {

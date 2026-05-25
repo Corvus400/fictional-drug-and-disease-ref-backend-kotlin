@@ -5,7 +5,9 @@ import io.ktor.server.plugins.di.dependencies
 
 fun Application.configureDI() {
     val appConfig = loadAppConfig()
+    val databaseConfig = loadDatabaseConfig()
     dependencies {
         provide<AppConfig> { appConfig }
+        provide<DatabaseConfig> { databaseConfig }
     }
 }
