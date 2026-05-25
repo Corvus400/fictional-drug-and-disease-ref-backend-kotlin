@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -43,7 +44,7 @@ suspend fun <T> dbQuery(
     databaseDispatcher: CoroutineDispatcher,
     block: suspend () -> T,
 ): T =
-    withContext(databaseDispatcher) {
+    withContext(databaseDispatcher + MDCContext()) {
         if (database == null) {
             suspendTransaction {
                 block()
