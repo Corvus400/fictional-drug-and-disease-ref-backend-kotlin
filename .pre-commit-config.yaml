@@ -1,5 +1,6 @@
 # pre-commit = spotless (ratchet で変更ファイルのみ高速 check)
-# 重い test / detekt / contract / image / gitleaks gate は GitHub Actions CI に移管する。
+# gitleaks は global git pre-commit hook で commit 前に実行する。
+# 重い test / detekt / contract / image gate は GitHub Actions CI に移管する。
 repos:
   - repo: local
     hooks:
