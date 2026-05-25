@@ -18,6 +18,20 @@ kotlin {
     jvmToolchain(21)
 }
 
+val seedSourceSet = sourceSets.create("seed") {
+    java.srcDir("src/seed/kotlin")
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += output + compileClasspath
+}
+
+configurations.named(seedSourceSet.implementationConfigurationName) {
+    extendsFrom(configurations.implementation.get())
+}
+
+configurations.named(seedSourceSet.runtimeOnlyConfigurationName) {
+    extendsFrom(configurations.runtimeOnly.get())
+}
+
 dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.host.common)
@@ -42,6 +56,10 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
+
+    add(seedSourceSet.implementationConfigurationName, libs.ktor.client.core)
+    add(seedSourceSet.implementationConfigurationName, libs.ktor.client.cio)
+    add(seedSourceSet.implementationConfigurationName, libs.ktor.client.content.negotiation)
 }
 
 ktor {
@@ -79,4 +97,18 @@ spotless {
 
 tasks.test {
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+}
+
+tasks.register<JavaExec>("exportSeedSql") {
+    group = "seed"
+    description = "Export fixed Flyway seed SQL from the mock-server API."
+    dependsOn("compileSeedKotlin")
+    classpath = seedSourceSet.runtimeClasspath
+    mainClass.set("io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.tools.SeedExporterKt")
+    args(
+        "--base-url",
+        providers.gradleProperty("seedBaseUrl").orElse("http://localhost:8080").get(),
+        "--output-dir",
+        layout.projectDirectory.dir("src/main/resources/db/migration").asFile.absolutePath,
+    )
 }
