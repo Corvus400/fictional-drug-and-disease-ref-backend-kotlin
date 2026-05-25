@@ -21,6 +21,8 @@ kotlin {
 dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.host.common)
+    // ktor-server-status-pages is catalog-only in Phase 1.
+    // StatusPages install is owned by Phase 2 error-handling.
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)

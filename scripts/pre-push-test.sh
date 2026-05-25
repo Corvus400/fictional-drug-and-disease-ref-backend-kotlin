@@ -1,4 +1,6 @@
 #!/bin/bash
+# pre-push stage で test 対象の差分がある時だけ ./gradlew test を実行する。
+# private 期間は CI を置かないため、旧 CI の test gate をローカル pre-push に集約。
 set -euo pipefail
 
 git fetch --quiet origin main

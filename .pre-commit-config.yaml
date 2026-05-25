@@ -1,4 +1,7 @@
-# CI is intentionally absent while this repository is private.
+# CI を置かない（private 期間）代わりに全 gate をローカルで担保する。
+# stages 分離: pre-commit = spotless (ratchet で変更ファイルのみ高速 check)
+#              pre-push   = detekt (compileKotlin 経由で重い) + test (旧 CI gate を集約)
+# -Pprecommit=true は detekt 公式 pre-commit ガイド推奨の Configuration Cache 再利用 property。
 repos:
   - repo: local
     hooks:
