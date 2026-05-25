@@ -1,3 +1,4 @@
+ARG RUNTIME_PLATFORM=linux/amd64
 FROM eclipse-temurin:21.0.10_7-jdk AS build
 
 WORKDIR /workspace
@@ -12,7 +13,7 @@ RUN ./gradlew --no-daemon --max-workers=1 \
     -Dkotlin.compiler.execution.strategy=in-process \
     buildFatJar
 
-FROM --platform=linux/amd64 eclipse-temurin:21.0.10_7-jre AS runtime
+FROM --platform=${RUNTIME_PLATFORM} eclipse-temurin:21.0.10_7-jre AS runtime
 
 WORKDIR /app
 
