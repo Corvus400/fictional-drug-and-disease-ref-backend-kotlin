@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability report
+    url: https://github.com/Corvus400/fictional-drug-and-disease-ref-backend-kotlin/security/advisories/new
+    about: Please do not disclose vulnerabilities in public issues.
+  - name: Medical-use notice
+    url: https://github.com/Corvus400/fictional-drug-and-disease-ref-backend-kotlin/blob/main/DISCLAIMER.md
+    about: This repository contains fictional data and must not be used for medical decisions.
