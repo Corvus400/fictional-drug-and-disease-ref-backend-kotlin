@@ -5,7 +5,9 @@ ktor:
   deployment:
     port: ${PORT:8080}
     host: ${HOST:0.0.0.0}
-  development: true
+    shutdownGracePeriod: ${SHUTDOWN_GRACE_PERIOD_MS:3000}
+    shutdownTimeout: ${SHUTDOWN_TIMEOUT_MS:10000}
+  development: ${KTOR_DEVELOPMENT:false}
 
 app:
   environment: local

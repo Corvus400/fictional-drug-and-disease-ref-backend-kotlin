@@ -1,6 +1,6 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config
 
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.module
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
@@ -18,7 +18,7 @@ class OpenApiTest {
     @Test
     fun `openapi json contains v1 business paths and no mock admin contract`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/openapi.json")
 

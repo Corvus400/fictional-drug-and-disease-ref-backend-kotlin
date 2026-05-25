@@ -22,7 +22,11 @@ fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
 }
 
-fun Application.module(databaseDispatcher: CoroutineDispatcher = productionDatabaseDispatcher()) {
+fun Application.module() {
+    moduleWithDatabaseDispatcher(databaseDispatcher = productionDatabaseDispatcher())
+}
+
+fun Application.moduleWithDatabaseDispatcher(databaseDispatcher: CoroutineDispatcher) {
     configureForwardedHeaders()
     configureLogging()
     configureSerialization()

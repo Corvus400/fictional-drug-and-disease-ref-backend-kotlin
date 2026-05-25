@@ -19,7 +19,7 @@ class SecurityRoutesTest {
     @Test
     fun `whoami without token returns 401 problem json`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/admin/whoami")
 
@@ -30,7 +30,7 @@ class SecurityRoutesTest {
     @Test
     fun `whoami with non admin scope returns 403`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/admin/whoami") {
             bearerAuth(mintToken(scope = "reader"))
@@ -43,7 +43,7 @@ class SecurityRoutesTest {
     @Test
     fun `whoami with admin scope returns 200`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/admin/whoami") {
             bearerAuth(mintToken(scope = "admin"))
@@ -55,7 +55,7 @@ class SecurityRoutesTest {
     @Test
     fun `public endpoint over rate limit returns 429 problem json with Retry After`() = testApplication {
         withPostgresConfig(rateLimitLimit = 2)
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         repeat(2) {
             assertEquals(HttpStatusCode.OK, client.get("/v1/categories").status)
@@ -70,7 +70,7 @@ class SecurityRoutesTest {
     @Test
     fun `public GET stays open without token`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         assertEquals(HttpStatusCode.OK, client.get("/v1/drugs").status)
     }

@@ -37,7 +37,6 @@ fun Application.configureDataLayerDependencies(
     dependencies {
         provide<DataSource> { dataSource }
         provide<Database> { database }
-        provide<CoroutineDispatcher> { databaseDispatcher }
         provide<DrugRepository> {
             ExposedDrugRepository(database = database, databaseDispatcher = databaseDispatcher)
         }

@@ -2,7 +2,7 @@ package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.categori
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.AppJson
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.CategoriesResponse
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.module
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
@@ -17,7 +17,7 @@ class CategoriesRoutesTest {
     @Test
     fun `GET categories returns seven non-empty category groups`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/categories")
 

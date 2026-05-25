@@ -5,7 +5,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Pr
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemTypes
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.DrugListResponse
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.module
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
@@ -21,7 +21,7 @@ class DrugRoutesTest {
     @Test
     fun `GET drugs returns seeded default page envelope`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/drugs")
 
@@ -36,7 +36,7 @@ class DrugRoutesTest {
     @Test
     fun `GET drugs supports sort and page_size query`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/drugs?sort=brand_name_kana&page_size=5")
 
@@ -48,7 +48,7 @@ class DrugRoutesTest {
     @Test
     fun `GET drugs rejects unknown regulatory class as problem json`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/drugs?regulatory_class=__bogus__")
 
@@ -62,7 +62,7 @@ class DrugRoutesTest {
     @Test
     fun `GET drug detail returns public id`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/drugs/drug_0001")
 
@@ -74,7 +74,7 @@ class DrugRoutesTest {
     @Test
     fun `GET missing drug detail returns not found problem`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/drugs/drug_9999")
 

@@ -5,7 +5,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Pr
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemTypes
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.DiseaseListResponse
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.module
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
@@ -21,7 +21,7 @@ class DiseaseRoutesTest {
     @Test
     fun `GET diseases returns seeded default page envelope`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/diseases")
 
@@ -36,7 +36,7 @@ class DiseaseRoutesTest {
     @Test
     fun `GET diseases rejects invalid boolean filter as problem json`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/diseases?infectious=maybe")
 
@@ -50,7 +50,7 @@ class DiseaseRoutesTest {
     @Test
     fun `GET disease detail returns public id`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/diseases/disease_0001")
 
@@ -62,7 +62,7 @@ class DiseaseRoutesTest {
     @Test
     fun `GET missing disease detail returns not found problem`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/diseases/disease_9999")
 

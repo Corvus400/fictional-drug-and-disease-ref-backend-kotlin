@@ -3,7 +3,7 @@ package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.common
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.AppJson
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemDetails
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemTypes
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.module
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
@@ -21,7 +21,7 @@ class ImageRoutesTest {
     @Test
     fun `GET dosage form image returns resized png`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/images/dosage-forms/tablet?size=S")
 
@@ -33,7 +33,7 @@ class ImageRoutesTest {
     @Test
     fun `GET dosage form image rejects unsupported size`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/images/dosage-forms/tablet?size=XL")
 
@@ -46,7 +46,7 @@ class ImageRoutesTest {
     @Test
     fun `GET drug image returns png for existing drug asset`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/images/drugs/drug_0080")
 
@@ -58,7 +58,7 @@ class ImageRoutesTest {
     @Test
     fun `GET drug image returns not found for missing drug asset`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/images/drugs/drug_0001")
 

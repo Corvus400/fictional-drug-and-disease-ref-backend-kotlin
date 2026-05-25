@@ -13,7 +13,7 @@ class ApplicationTest {
     @Test
     fun `health endpoint returns ok`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("""{"status":"ok"}""", response.bodyAsText())

@@ -54,7 +54,7 @@ class ObservabilityTest {
     fun `metrics endpoint allows loopback and exposes prometheus metrics even when forwarded header is public`() =
         testApplication {
             withPostgresConfig()
-            application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+            application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
             client.get("/health")
             val response = client.get("/metrics") {
@@ -74,7 +74,7 @@ class ObservabilityTest {
             start()
         }
         logger.addAppender(appender)
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         try {
             val response = client.get("/health")
@@ -95,7 +95,7 @@ class ObservabilityTest {
     @Test
     fun `readiness endpoint returns ready when database is reachable`() = testApplication {
         withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/health/ready")
 
