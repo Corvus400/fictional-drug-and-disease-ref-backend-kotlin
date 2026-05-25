@@ -50,20 +50,5 @@ container delete "$APP_CONTAINER_NAME" 2>/dev/null || true
 container stop "$PG_CONTAINER_NAME" 2>/dev/null || true
 container delete "$PG_CONTAINER_NAME" 2>/dev/null || true
 
-cleanup_zombie_runtime_processes() {
-    local process_count
-    process_count="$( (pgrep -f "container-runtime-linux" 2>/dev/null || true) | wc -l | tr -d ' ')"
-    if [ "$process_count" -gt 1 ]; then
-        echo "WARNING: Found ${process_count} container-runtime-linux processes; cleaning up."
-        pkill -f "container-runtime-linux" 2>/dev/null || true
-        sleep 2
-        if pgrep -f "container-runtime-linux" > /dev/null 2>&1; then
-            pkill -9 -f "container-runtime-linux" 2>/dev/null || true
-        fi
-    fi
-}
-
-cleanup_zombie_runtime_processes
-
 echo ""
 echo "=== Stop complete ==="
