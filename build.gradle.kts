@@ -51,6 +51,12 @@ dependencies {
     implementation(libs.hikari)
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
+    implementation(libs.smiley4.ktor.openapi)
+    implementation(libs.smiley4.ktor.swagger.ui)
+    implementation(libs.smiley4.ktor.redoc)
+    implementation(libs.smiley4.schema.kenerator.core)
+    implementation(libs.smiley4.schema.kenerator.serialization)
+    implementation(libs.smiley4.schema.kenerator.swagger)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

@@ -13,6 +13,8 @@ testcontainers = "1.21.4"
 micrometer = "1.16.5"
 opentelemetry = "1.62.0"
 java-jwt = "4.5.2"
+smiley4-openapi = "5.7.0"
+schema-kenerator = "2.7.2"
 
 [libraries]
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
@@ -52,6 +54,12 @@ ktor-server-rate-limit = { module = "io.ktor:ktor-server-rate-limit", version.re
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-forwarded-header = { module = "io.ktor:ktor-server-forwarded-header", version.ref = "ktor" }
 ktor-server-request-validation = { module = "io.ktor:ktor-server-request-validation", version.ref = "ktor" }
+smiley4-ktor-openapi = { module = "io.github.smiley4:ktor-openapi", version.ref = "smiley4-openapi" }
+smiley4-ktor-swagger-ui = { module = "io.github.smiley4:ktor-swagger-ui", version.ref = "smiley4-openapi" }
+smiley4-ktor-redoc = { module = "io.github.smiley4:ktor-redoc", version.ref = "smiley4-openapi" }
+smiley4-schema-kenerator-core = { module = "io.github.smiley4:schema-kenerator-core", version.ref = "schema-kenerator" }
+smiley4-schema-kenerator-serialization = { module = "io.github.smiley4:schema-kenerator-serialization", version.ref = "schema-kenerator" }
+smiley4-schema-kenerator-swagger = { module = "io.github.smiley4:schema-kenerator-swagger", version.ref = "schema-kenerator" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

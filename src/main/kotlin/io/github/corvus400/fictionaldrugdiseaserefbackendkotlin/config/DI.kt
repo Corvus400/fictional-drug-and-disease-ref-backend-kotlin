@@ -4,6 +4,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DiseaseRepo
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DrugRepository
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.ExposedDiseaseRepository
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.ExposedDrugRepository
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.CategoriesQueryService
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DiseaseListQueryService
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DrugListQueryService
 import io.ktor.server.application.Application
@@ -38,5 +39,6 @@ fun Application.configureDataLayerDependencies(
         }
         provide<DrugListQueryService> { DrugListQueryService(resolve()) }
         provide<DiseaseListQueryService> { DiseaseListQueryService(resolve()) }
+        provide<CategoriesQueryService> { CategoriesQueryService(resolve()) }
     }
 }
