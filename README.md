@@ -114,6 +114,47 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
 ./scripts/stop.sh
 ```
 
+### Cloudflare Tunnel Publishing
+
+The default startup path is local only. The application binds the host port to
+`127.0.0.1:8080`, and PostgreSQL is not published to the host. Do not add a
+router port-forward for `8080`; public traffic is expected to arrive only
+through `cloudflared`.
+
+One-time setup:
+
+```bash
+TUNNEL_HOSTNAME=fictional-drugref.win ./scripts/setup.sh
+```
+
+`setup.sh` installs or checks `cloudflared`, opens the Cloudflare browser login
+when needed, creates or reuses the named tunnel
+`fictional-drugref-backend`, routes DNS for the hostname, writes
+`cloudflared/config.yml`, and restricts the Cloudflare certificate and
+credential file permissions.
+
+Daily operation:
+
+```bash
+./scripts/start.sh --public
+./scripts/stop.sh
+```
+
+`start.sh --public` starts PostgreSQL, the Ktor app, and a background
+Cloudflare Tunnel process. It generates runtime-only database and JWT secrets
+for public mode and injects them through temporary env files. `stop.sh` stops
+the tunnel and deletes the local containers.
+
+The committed `cloudflared/config.yml.example` blocks `/metrics` at the
+Cloudflare ingress before forwarding other requests to `http://localhost:8080`.
+Keep the generated `cloudflared/config.yml`, tunnel credentials, and PID/log
+files out of Git. If credentials are exposed, revoke or recreate the tunnel.
+
+Cloudflare Access is intentionally not required for this fictional public API.
+Admin endpoints remain protected by the app's JWT layer. Add Access later only
+if the project starts handling real sensitive data, compliance requirements, or
+multiple human operators.
+
 ### コミット前 / push ゲート
 
 ローカル hook は pre-commit の Spotless ratchet を維持します。重い pre-push gate は CI に移管します。

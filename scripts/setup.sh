@@ -8,11 +8,17 @@ CONTAINER_VERSION="0.8.0"
 CONTAINER_PKG_URL="https://github.com/apple/container/releases/download/${CONTAINER_VERSION}/container-installer-signed.pkg"
 CONTAINER_PKG_PATH="/tmp/container-installer-${CONTAINER_VERSION}.pkg"
 REQUIRED_JDK_VERSION="21.0.6-tem"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TUNNEL_NAME="fictional-drugref-backend"
+TUNNEL_HOSTNAME="${TUNNEL_HOSTNAME:-fictional-drugref.win}"
+CLOUDFLARED_DIR="$PROJECT_DIR/cloudflared"
+CLOUDFLARED_CONFIG="$CLOUDFLARED_DIR/config.yml"
+CLOUDFLARED_EXAMPLE="$CLOUDFLARED_DIR/config.yml.example"
 
 echo "=== Backend environment setup ==="
 echo ""
 
-echo "Step 1/6: Checking macOS version..."
+echo "Step 1/7: Checking macOS version..."
 MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 echo "Detected macOS ${MACOS_MAJOR}"
 if [ "$MACOS_MAJOR" -lt 26 ]; then
@@ -21,7 +27,7 @@ if [ "$MACOS_MAJOR" -lt 26 ]; then
 fi
 
 echo ""
-echo "Step 2/6: Checking Homebrew..."
+echo "Step 2/7: Checking Homebrew..."
 if command -v brew > /dev/null 2>&1; then
     echo "OK: Homebrew is installed"
 else
@@ -29,7 +35,7 @@ else
 fi
 
 echo ""
-echo "Step 3/6: Checking JDK 21..."
+echo "Step 3/7: Checking JDK 21..."
 if [ -z "${SDKMAN_DIR:-}" ]; then
     export SDKMAN_DIR="$HOME/.sdkman"
 fi
@@ -102,7 +108,7 @@ else
 fi
 
 echo ""
-echo "Step 4/6: Checking Apple Container..."
+echo "Step 4/7: Checking Apple Container..."
 if command -v container > /dev/null 2>&1; then
     CONTAINER_INSTALLED_VERSION="$(container --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
     echo "OK: Apple Container ${CONTAINER_INSTALLED_VERSION:-unknown} is installed"
@@ -122,7 +128,7 @@ else
 fi
 
 echo ""
-echo "Step 5/6: Checking Rosetta 2..."
+echo "Step 5/7: Checking Rosetta 2..."
 if [ "$(uname -m)" = "arm64" ]; then
     if arch -x86_64 /usr/bin/true 2>/dev/null; then
         echo "OK: Rosetta 2 is installed"
@@ -138,7 +144,7 @@ else
 fi
 
 echo ""
-echo "Step 6/6: Checking Apple Container system service..."
+echo "Step 6/7: Checking Apple Container system service..."
 if container system status > /dev/null 2>&1; then
     echo "OK: Apple Container system service is running"
 else
@@ -151,6 +157,124 @@ else
 fi
 
 echo ""
+echo "Step 7/7: Checking Cloudflare Tunnel setup..."
+
+install_cloudflared_if_missing() {
+    if command -v cloudflared > /dev/null 2>&1; then
+        echo "OK: cloudflared is installed"
+        return 0
+    fi
+
+    if ! command -v brew > /dev/null 2>&1; then
+        echo "WARNING: cloudflared is not installed and Homebrew is unavailable."
+        echo "Install cloudflared manually, then rerun ./scripts/setup.sh before using ./scripts/start.sh --public."
+        return 0
+    fi
+
+    echo "cloudflared is not installed."
+    echo "Install it with Homebrew now? [y/N]"
+    read -r install_answer
+    if [[ "$install_answer" =~ ^[Yy]$ ]]; then
+        brew install cloudflared
+    else
+        echo "Skipping cloudflared install. Public tunnel setup remains incomplete."
+    fi
+}
+
+expand_home_path() {
+    local raw_path="$1"
+    case "$raw_path" in
+        "~/"*) printf '%s\n' "$HOME/${raw_path#~/}" ;;
+        *) printf '%s\n' "$raw_path" ;;
+    esac
+}
+
+fix_cloudflared_permissions() {
+    local path="$1"
+    [ -n "$path" ] || return 0
+    path="$(expand_home_path "$path")"
+    if [ -e "$path" ]; then
+        chmod 600 "$path"
+        echo "OK: restricted permissions on $path"
+    fi
+}
+
+cloudflared_tunnel_id() {
+    cloudflared tunnel list --output json 2>/dev/null \
+        | tr -d '\n' \
+        | sed -n "s/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\"[^{}]*\"name\"[[:space:]]*:[[:space:]]*\"${TUNNEL_NAME}\".*/\\1/p" \
+        | head -1
+}
+
+write_cloudflared_config() {
+    local tunnel_id="$1"
+    local hostname="$2"
+    local credentials_file="$HOME/.cloudflared/${tunnel_id}.json"
+
+    mkdir -p "$CLOUDFLARED_DIR"
+    if [ ! -f "$CLOUDFLARED_EXAMPLE" ]; then
+        echo "ERROR: Missing $CLOUDFLARED_EXAMPLE."
+        exit 1
+    fi
+
+    sed \
+        -e "s|<TUNNEL_UUID>|${tunnel_id}|g" \
+        -e "s|<TUNNEL_NAME>|${TUNNEL_NAME}|g" \
+        -e "s|<HOSTNAME>|${hostname}|g" \
+        -e "s|<CREDENTIALS_FILE>|${credentials_file}|g" \
+        "$CLOUDFLARED_EXAMPLE" > "$CLOUDFLARED_CONFIG"
+    chmod 600 "$CLOUDFLARED_CONFIG"
+    fix_cloudflared_permissions "$credentials_file"
+    fix_cloudflared_permissions "$HOME/.cloudflared/cert.pem"
+    echo "OK: wrote $CLOUDFLARED_CONFIG"
+}
+
+install_cloudflared_if_missing
+
+if command -v cloudflared > /dev/null 2>&1; then
+    if [ ! -f "$HOME/.cloudflared/cert.pem" ]; then
+        echo "cloudflared is not authenticated."
+        echo "A browser login will open. Complete it, then return here."
+        cloudflared tunnel login
+    else
+        echo "OK: cloudflared certificate exists"
+    fi
+    fix_cloudflared_permissions "$HOME/.cloudflared/cert.pem"
+
+    TUNNEL_ID="$(cloudflared_tunnel_id)"
+    if [ -z "$TUNNEL_ID" ]; then
+        echo "Creating Cloudflare Tunnel: $TUNNEL_NAME"
+        cloudflared tunnel create "$TUNNEL_NAME"
+        TUNNEL_ID="$(cloudflared_tunnel_id)"
+    else
+        echo "OK: Cloudflare Tunnel exists: $TUNNEL_NAME ($TUNNEL_ID)"
+    fi
+
+    if [ -z "$TUNNEL_ID" ]; then
+        echo "ERROR: Could not resolve tunnel id for $TUNNEL_NAME."
+        exit 1
+    fi
+
+    echo "Public hostname [$TUNNEL_HOSTNAME]:"
+    read -r input_hostname
+    if [ -n "$input_hostname" ]; then
+        TUNNEL_HOSTNAME="$input_hostname"
+    fi
+
+    echo "Routing DNS for $TUNNEL_HOSTNAME..."
+    if cloudflared tunnel route dns "$TUNNEL_NAME" "$TUNNEL_HOSTNAME"; then
+        echo "OK: DNS route is configured"
+    else
+        echo "WARNING: DNS route command failed. If the CNAME already exists, continuing is usually safe."
+    fi
+
+    write_cloudflared_config "$TUNNEL_ID" "$TUNNEL_HOSTNAME"
+else
+    echo "Skipping Cloudflare Tunnel setup because cloudflared is unavailable."
+fi
+
+echo ""
 echo "=== Setup complete ==="
 echo "Start: ./scripts/start.sh"
+echo "Public start: ./scripts/start.sh --public"
 echo "Stop:  ./scripts/stop.sh"

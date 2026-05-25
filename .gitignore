@@ -51,3 +51,10 @@ local.properties
 id_rsa
 id_ed25519
 *.log
+
+### Cloudflare Tunnel local state ###
+cloudflared/config.yml
+cloudflared/*.json
+cloudflared/cert.pem
+.cloudflared.pid
+.cloudflared.log

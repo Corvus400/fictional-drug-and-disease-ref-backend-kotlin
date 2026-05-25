@@ -1,0 +1,13 @@
+tunnel: <TUNNEL_UUID>
+credentials-file: <CREDENTIALS_FILE>
+
+ingress:
+  - hostname: <HOSTNAME>
+    path: ^/metrics
+    service: http_status:403
+  - hostname: <HOSTNAME>
+    service: http://localhost:8080
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: false
+  - service: http_status:404
