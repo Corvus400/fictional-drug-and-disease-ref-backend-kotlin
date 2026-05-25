@@ -1,0 +1,32 @@
+# CI is intentionally absent while this repository is private.
+repos:
+  - repo: local
+    hooks:
+      - id: gradle-spotless-check
+        name: Spotless check (ratchet from origin/main)
+        entry: scripts/pre-commit-spotless-check.sh
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+      - id: gradle-detekt-main
+        name: detekt main (push gate)
+        entry: scripts/pre-push-detekt-main.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+      - id: gradle-detekt-test
+        name: detekt test (push gate)
+        entry: scripts/pre-push-detekt-test.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+      - id: gradle-test
+        name: gradle test (push gate, ex-CI)
+        entry: scripts/pre-push-test.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

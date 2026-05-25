@@ -1,0 +1,85 @@
+# detekt configuration for fictional-drug-and-disease-ref-mock-server
+# buildUponDefaultConfig = true なので、ここではデフォルトからの差分のみ記載
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+complexity:
+  # Mock Server のルーティング関数はエンドポイント定義を一括記述するため長くなる
+  LongMethod:
+    allowedLines: 300
+
+  # ルーティング関数はwhen分岐が多い
+  CyclomaticComplexMethod:
+    allowedComplexity: 50
+
+  # Fixture クラスや HTML レンダラーは大量のデータ/テンプレートを保持する
+  LargeClass:
+    allowedLines: 1500
+
+  # HTML レンダラーやDateHelperはユーティリティ関数を集約する
+  TooManyFunctions:
+    allowedFunctionsPerFile: 20
+    allowedFunctionsPerClass: 20
+    allowedFunctionsPerInterface: 20
+    allowedFunctionsPerObject: 20
+
+  # Mock データ構築ヘルパーはパラメータが多い
+  LongParameterList:
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 8
+
+  # 複雑な処理の深いネスト
+  NestedBlockDepth:
+    allowedDepth: 6
+
+naming:
+  # 複数の関連型を1ファイルにまとめるパターンを許容
+  MatchingDeclarationName:
+    active: false
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true
+    # mainソースでは !! を禁止（requireNotNull() または safe call を使用）
+    # testソースではデフォルトで除外済み（default-detekt-config の excludes）
+
+  # Mock Server ではロケール依存のフォーマットは問題にならない
+  ImplicitDefaultLocale:
+    active: false
+
+style:
+  # Mock Server 全体で数値リテラルを多用する（価格、税率、画像サイズ、HTTPステータス等）
+  # fixture: Mock データ定義、routes: HTML テンプレート内の価格表示、scenario: 価格計算
+  MagicNumber:
+    excludes:
+      - '**/fixture/**'
+      - '**/routes/**'
+      - '**/scenario/**'
+      - '**/test/**'
+      - '**/*.kts'
+    ignoreAnnotated:
+      - 'Serializable'
+      - 'kotlinx.serialization.Serializable'
+    ignorePropertyDeclaration: true
+
+  # MaxLineLength は .editorconfig + ktlint (Spotless) で 120 文字に統一済み
+  # detekt のデフォルトも 120 なのでそのまま使用
+
+  # ルーティング関数は分岐が多くなるため緩和
+  ReturnCount:
+    max: 5
+    excludeGuardClauses: true
+
+  # HTML テンプレートの断片を関数で返すパターンは意図的な設計
+  FunctionOnlyReturningConstant:
+    active: false
+
+  # ?: emptyList() / ?: emptyMap() → .orEmpty() を強制
+  UseOrEmpty:
+    active: true
+
+  # DestructuringDeclaration の最大エントリ数を緩和
+  DestructuringDeclarationWithTooManyEntries:
+    maxDestructuringEntries: 5

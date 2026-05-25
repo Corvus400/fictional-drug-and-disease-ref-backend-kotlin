@@ -1,0 +1,72 @@
+# fictional-drug-and-disease-ref-mock-server .editorconfig
+# 参考: https://github.com/ktorio/ktor/blob/main/.editorconfig（追加ルール）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+[*.json]
+indent_size = 2
+
+[*.{kt,kts}]
+ij_kotlin_code_style_defaults = KOTLIN_OFFICIAL
+ij_kotlin_name_count_to_use_star_import = 2147483647
+ij_kotlin_name_count_to_use_star_import_for_members = 2147483647
+ij_kotlin_packages_to_use_import_on_demand = unset
+
+# noinspection EditorConfigKeyCorrectness
+ktlint_code_style = intellij_idea
+
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_no-wildcard-imports = enabled
+
+ij_kotlin_allow_trailing_comma_on_call_site = true
+# noinspection EditorConfigKeyCorrectness
+ij_kotlin_allow_trailing_comma_on_declaration_site = true
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_trailing-comma-on-call-site = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+
+# Ktor公式から採用するルール
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_if-else-bracing = enabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_if-else-wrapping = enabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_no-consecutive-comments = enabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_try-catch-finally-spacing = enabled
+
+# Ktor公式で無効化されているルール（採用）
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_annotation = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_class-naming = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_class-signature = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_comment-wrapping = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_filename = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_function-expression-body = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_function-signature = disabled
+# noinspection EditorConfigKeyCorrectness
+ktlint_standard_property-naming = disabled
+
+# noinspection EditorConfigKeyCorrectness
+ktlint_function_naming_ignore_when_annotated_with = Test
+
+[*.properties]
+ij_properties_keep_blank_lines = true
+
+[{*.yml,*.yaml}]
+indent_size = 2

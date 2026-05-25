@@ -1,0 +1,4 @@
+title = "fictional-drug-and-disease-ref-backend-kotlin gitleaks configuration"
+
+[extend]
+useDefault = true

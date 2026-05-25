@@ -1,0 +1,11 @@
+ktor:
+  application:
+    modules:
+      - io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.ApplicationKt.module
+  deployment:
+    port: ${PORT:8080}
+    host: ${HOST:0.0.0.0}
+  development: true
+
+app:
+  environment: local
