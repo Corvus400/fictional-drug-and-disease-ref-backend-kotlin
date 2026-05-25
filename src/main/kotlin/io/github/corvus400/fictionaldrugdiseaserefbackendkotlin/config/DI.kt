@@ -17,10 +17,12 @@ fun Application.configureDI() {
     val appConfig = loadAppConfig()
     val databaseConfig = loadDatabaseConfig()
     val securityConfig = loadSecurityConfig(appConfig.environment)
+    val observabilityConfig = loadObservabilityConfig()
     dependencies {
         provide<AppConfig> { appConfig }
         provide<DatabaseConfig> { databaseConfig }
         provide<SecurityConfig> { securityConfig }
+        provide<ObservabilityConfig> { observabilityConfig }
     }
 }
 

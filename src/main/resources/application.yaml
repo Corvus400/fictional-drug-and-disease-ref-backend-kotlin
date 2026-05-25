@@ -23,3 +23,8 @@ security:
   rateLimitLimit: ${RATE_LIMIT_LIMIT:60}
   rateLimitRefillSeconds: ${RATE_LIMIT_REFILL_SECONDS:60}
   corsAllowedOrigins: ${CORS_ALLOWED_ORIGINS:}
+
+observability:
+  serviceName: ${OTEL_SERVICE_NAME:drug-disease-api}
+  logLevel: ${LOG_LEVEL:INFO}
+  metricsAllowedCidrs: ${METRICS_ALLOWED_CIDRS:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}

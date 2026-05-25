@@ -63,6 +63,9 @@ object PostgresTestSupport {
                 "security.rateLimitLimit" to rateLimitLimit.toString(),
                 "security.rateLimitRefillSeconds" to rateLimitRefillSeconds.toString(),
                 "security.corsAllowedOrigins" to "",
+                "observability.serviceName" to "drug-disease-api-test",
+                "observability.logLevel" to "INFO",
+                "observability.metricsAllowedCidrs" to "127.0.0.1/32,::1/128",
             )
         }
     }
