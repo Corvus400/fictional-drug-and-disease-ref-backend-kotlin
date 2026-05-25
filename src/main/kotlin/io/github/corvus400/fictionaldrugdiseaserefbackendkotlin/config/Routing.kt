@@ -20,6 +20,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 
 fun Application.configureRouting() {
     val drugRepository: DrugRepository by dependencies
@@ -27,9 +28,22 @@ fun Application.configureRouting() {
     val drugListService: DrugListQueryService by dependencies
     val diseaseListService: DiseaseListQueryService by dependencies
     val categoriesService: CategoriesQueryService by dependencies
+    val observabilityConfig: ObservabilityConfig by dependencies
+    val metricsRegistry: PrometheusMeterRegistry by dependencies
     routing {
         get("/health") {
             call.respond(mapOf("status" to "ok"))
+        }
+        route("/metrics") {
+            install(MetricsAllowlist) {
+                allowedCidrs = observabilityConfig.metricsAllowedCidrs
+            }
+            get {
+                call.respondText(
+                    text = metricsRegistry.scrape(),
+                    contentType = ContentType.parse("text/plain; version=0.0.4"),
+                )
+            }
         }
         get("/robots.txt") {
             call.respondText(

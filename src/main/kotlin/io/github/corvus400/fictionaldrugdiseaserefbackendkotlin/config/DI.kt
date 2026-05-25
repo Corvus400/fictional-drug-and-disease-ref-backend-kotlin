@@ -9,6 +9,8 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DiseaseLis
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DrugListQueryService
 import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.coroutines.CoroutineDispatcher
 import org.jetbrains.exposed.v1.jdbc.Database
 import javax.sql.DataSource
@@ -23,6 +25,7 @@ fun Application.configureDI() {
         provide<DatabaseConfig> { databaseConfig }
         provide<SecurityConfig> { securityConfig }
         provide<ObservabilityConfig> { observabilityConfig }
+        provide<PrometheusMeterRegistry> { PrometheusMeterRegistry(PrometheusConfig.DEFAULT) }
     }
 }
 
