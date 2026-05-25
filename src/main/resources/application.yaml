@@ -3,7 +3,7 @@ ktor:
     modules:
       - io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.ApplicationKt.module
   deployment:
-    port: ${PORT:8080}
+    port: ${PORT:18080}
     host: ${HOST:0.0.0.0}
     shutdownGracePeriod: ${SHUTDOWN_GRACE_PERIOD_MS:3000}
     shutdownTimeout: ${SHUTDOWN_TIMEOUT_MS:10000}
@@ -19,7 +19,7 @@ database:
   maxPoolSize: ${DB_MAX_POOL_SIZE:10}
 
 security:
-  jwtIssuer: ${JWT_ISSUER:http://localhost:8080}
+  jwtIssuer: ${JWT_ISSUER:http://localhost:18080}
   jwtAudience: ${JWT_AUDIENCE:fictional-drug-ref}
   jwtRealm: fictional-drug-ref
   rateLimitLimit: ${RATE_LIMIT_LIMIT:60}

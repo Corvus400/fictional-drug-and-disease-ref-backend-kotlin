@@ -9,7 +9,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 APP_CONTAINER_NAME="fictional-drugref-backend-app"
 PG_CONTAINER_NAME="fictional-drugref-backend-postgres"
-APP_PORT="8080"
+APP_PORT="${APP_PORT:-18080}"
 DB_NAME="drugref"
 DB_USER="drugref"
 DB_PASSWORD="drugref"
