@@ -17,7 +17,7 @@ data class SecurityConfig(
 fun Application.loadSecurityConfig(appEnv: String): SecurityConfig =
     SecurityConfig(
         jwtSecret = resolveJwtSecret(appEnv),
-        jwtIssuer = resolveConfig("JWT_ISSUER", "security.jwtIssuer", default = "http://localhost:8080"),
+        jwtIssuer = resolveConfig("JWT_ISSUER", "security.jwtIssuer", default = "http://localhost:18080"),
         jwtAudience = resolveConfig("JWT_AUDIENCE", "security.jwtAudience", default = "fictional-drug-ref"),
         jwtRealm = resolveConfig("JWT_REALM", "security.jwtRealm", default = "fictional-drug-ref"),
         rateLimitLimit = resolveConfig("RATE_LIMIT_LIMIT", "security.rateLimitLimit", default = "60").toInt(),

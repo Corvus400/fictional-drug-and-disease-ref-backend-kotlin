@@ -35,12 +35,12 @@ DO NOT use for medical decisions or clinical practice.
 ```bash
 ./scripts/setup.sh
 ./scripts/start.sh
-curl -s http://127.0.0.1:8080/health/ready
-curl -s 'http://127.0.0.1:8080/v1/drugs?page=1&page_size=5'
+curl -s http://127.0.0.1:18080/health/ready
+curl -s 'http://127.0.0.1:18080/v1/drugs?page=1&page_size=5'
 ./scripts/stop.sh
 ```
 
-`./scripts/start.sh` は fresh な PostgreSQL コンテナを起動し、database readiness を待ち、application image を build し、Flyway migration 後に API を `127.0.0.1:8080` のみに公開します。
+`./scripts/start.sh` は fresh な PostgreSQL コンテナを起動し、database readiness を待ち、application image を build し、Flyway migration 後に API を `127.0.0.1:18080` のみに公開します。
 
 ## 動作環境
 
@@ -106,19 +106,19 @@ Use `/health` for restart decisions and `/health/ready` for traffic routing. A t
 
 ```bash
 ./scripts/start.sh
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health/ready
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health/ready
 container stop fictional-drugref-backend-postgres
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health/ready
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health/ready
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health
 ./scripts/stop.sh
 ```
 
 ### Cloudflare Tunnel Publishing
 
 The default startup path is local only. The application binds the host port to
-`127.0.0.1:8080`, and PostgreSQL is not published to the host. Do not add a
-router port-forward for `8080`; public traffic is expected to arrive only
+`127.0.0.1:18080`, and PostgreSQL is not published to the host. Do not add a
+router port-forward for `18080`; public traffic is expected to arrive only
 through `cloudflared`.
 
 One-time setup:
@@ -146,7 +146,7 @@ for public mode and injects them through temporary env files. `stop.sh` stops
 the tunnel and deletes the local containers.
 
 The committed `cloudflared/config.yml.example` blocks `/metrics` at the
-Cloudflare ingress before forwarding other requests to `http://localhost:8080`.
+Cloudflare ingress before forwarding other requests to `http://localhost:18080`.
 Keep the generated `cloudflared/config.yml`, tunnel credentials, and PID/log
 files out of Git. If credentials are exposed, revoke or recreate the tunnel.
 
