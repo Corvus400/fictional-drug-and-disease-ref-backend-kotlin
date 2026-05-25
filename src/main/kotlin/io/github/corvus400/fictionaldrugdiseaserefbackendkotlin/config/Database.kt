@@ -27,6 +27,7 @@ fun Application.configureDatabase() {
     val dataSource = hikariDataSource(cfg)
     Flyway.configure()
         .dataSource(dataSource)
+        .placeholderReplacement(false)
         .load()
         .migrate()
     val database = Database.connect(dataSource)

@@ -128,7 +128,8 @@ private fun renderSeed(tableName: String, rows: List<Pair<String, String>>): Str
             append(publicId.sqlString())
             append("', ")
             append(DOLLAR_QUOTE)
-            append(json)
+            appendLine()
+            appendLine(json)
             append(DOLLAR_QUOTE)
             appendLine("::jsonb);")
         }

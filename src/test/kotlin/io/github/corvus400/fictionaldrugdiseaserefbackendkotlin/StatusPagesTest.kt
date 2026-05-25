@@ -8,6 +8,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemDetails
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemTypes
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -24,6 +25,7 @@ import kotlin.test.assertNull
 class StatusPagesTest {
     @Test
     fun `unmatched route returns problem json 404`() = testApplication {
+        withPostgresConfig()
         application { module() }
         val response = client.get("/definitely-not-a-route")
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -35,6 +37,7 @@ class StatusPagesTest {
 
     @Test
     fun `thrown DomainException renders problem json`() = testApplication {
+        withPostgresConfig()
         application {
             module()
             routing {
@@ -52,6 +55,7 @@ class StatusPagesTest {
 
     @Test
     fun `respondResult failure renders problem json`() = testApplication {
+        withPostgresConfig()
         application {
             module()
             routing {
@@ -75,6 +79,7 @@ class StatusPagesTest {
 
     @Test
     fun `unexpected exception does not leak cause message`() = testApplication {
+        withPostgresConfig()
         application {
             module()
             routing {
