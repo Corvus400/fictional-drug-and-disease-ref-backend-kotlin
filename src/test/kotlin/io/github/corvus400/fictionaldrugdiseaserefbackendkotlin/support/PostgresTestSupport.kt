@@ -44,7 +44,11 @@ object PostgresTestSupport {
     @Suppress("InjectDispatcher")
     val databaseDispatcher: CoroutineDispatcher = Dispatchers.IO
 
-    fun TestApplicationBuilder.withPostgresConfig() {
+    fun TestApplicationBuilder.withPostgresConfig(
+        jwtSecret: String = "test-secret-please-change",
+        rateLimitLimit: Int = 1000,
+        rateLimitRefillSeconds: Long = 60,
+    ) {
         environment {
             config = MapApplicationConfig(
                 "app.environment" to "test",
@@ -52,6 +56,13 @@ object PostgresTestSupport {
                 "database.user" to databaseConfig.user,
                 "database.password" to databaseConfig.password,
                 "database.maxPoolSize" to databaseConfig.maxPoolSize.toString(),
+                "security.jwtSecret" to jwtSecret,
+                "security.jwtIssuer" to "http://localhost",
+                "security.jwtAudience" to "fictional-drug-ref",
+                "security.jwtRealm" to "fictional-drug-ref",
+                "security.rateLimitLimit" to rateLimitLimit.toString(),
+                "security.rateLimitRefillSeconds" to rateLimitRefillSeconds.toString(),
+                "security.corsAllowedOrigins" to "",
             )
         }
     }

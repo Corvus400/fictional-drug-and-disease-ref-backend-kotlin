@@ -39,6 +39,22 @@ fun Application.configureStatusPages() {
                 ),
             )
         }
+        status(HttpStatusCode.TooManyRequests) { call, status ->
+            val retryAfter = call.response.headers["Retry-After"]
+            call.respondProblem(
+                ProblemDetails(
+                    type = ProblemTypes.RATE_LIMITED,
+                    title = "Too Many Requests",
+                    status = status.value,
+                    detail = if (retryAfter == null) {
+                        "Rate limit exceeded."
+                    } else {
+                        "Rate limit exceeded. Retry after $retryAfter seconds."
+                    },
+                    instance = call.request.uri,
+                ),
+            )
+        }
     }
 }
 

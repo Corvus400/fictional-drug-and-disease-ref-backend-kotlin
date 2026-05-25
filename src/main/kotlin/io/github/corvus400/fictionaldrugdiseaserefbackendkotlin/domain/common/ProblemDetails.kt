@@ -33,5 +33,6 @@ object ProblemTypes {
     const val CONFLICT: String = "$BASE/conflict"
     const val UNAUTHORIZED: String = "$BASE/unauthorized"
     const val FORBIDDEN: String = "$BASE/forbidden"
+    const val RATE_LIMITED: String = "$BASE/rate-limited"
     const val INTERNAL: String = "$BASE/internal"
 }

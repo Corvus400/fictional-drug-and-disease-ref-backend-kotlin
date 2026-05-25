@@ -16,9 +16,11 @@ import javax.sql.DataSource
 fun Application.configureDI() {
     val appConfig = loadAppConfig()
     val databaseConfig = loadDatabaseConfig()
+    val securityConfig = loadSecurityConfig(appConfig.environment)
     dependencies {
         provide<AppConfig> { appConfig }
         provide<DatabaseConfig> { databaseConfig }
+        provide<SecurityConfig> { securityConfig }
     }
 }
 
