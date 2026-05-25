@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  classify-ci-trust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      trusted: ${{ steps.classify.outputs.trusted }}
+
+    steps:
+      - id: classify
+        name: Classify workflow trust
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTOR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || github.actor }}
+          HEAD_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          trusted="false"
+          case "$ACTOR" in
+            Corvus400|renovate\[bot\]|dependabot\[bot\])
+              if [ "$HEAD_REPOSITORY" = "$REPOSITORY" ]; then
+                trusted="true"
+              fi
+              ;;
+          esac
+
+          echo "event=$EVENT"
+          echo "trusted=$trusted" >> "$GITHUB_OUTPUT"
+          echo "trusted=$trusted"
+
+  build-and-test:
+    needs: [classify-ci-trust]
+    if: needs.classify-ci-trust.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      # actions/setup-java@v5
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        # gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e
+        with:
+          cache-provider: basic
+      - name: Gradle full gate
+        run: ./gradlew test spotlessCheck detektMain detektTest
+      - name: Build linux/amd64 image
+        run: docker buildx build --platform linux/amd64 -f Containerfile -t drug-api:${{ github.sha }} --load .
+
+  gitleaks:
+    needs: [classify-ci-trust]
+    if: needs.classify-ci-trust.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      # gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  ci-gate:
+    needs: [classify-ci-trust, build-and-test, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check required CI jobs
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify-ci-trust.result }}
+          TRUSTED: ${{ needs.classify-ci-trust.outputs.trusted }}
+          BUILD_AND_TEST_RESULT: ${{ needs.build-and-test.result }}
+          GITLEAKS_RESULT: ${{ needs.gitleaks.result }}
+        run: |
+          set -euo pipefail
+          if [ "$CLASSIFY_RESULT" != "success" ]; then
+            echo "::error::classify-ci-trust result is $CLASSIFY_RESULT"
+            exit 1
+          fi
+          if [ "$TRUSTED" != "true" ]; then
+            echo "::error::External pull requests are not accepted for this portfolio repository."
+            exit 1
+          fi
+          if [ "$BUILD_AND_TEST_RESULT" != "success" ]; then
+            echo "::error::build-and-test result is $BUILD_AND_TEST_RESULT"
+            exit 1
+          fi
+          if [ "$GITLEAKS_RESULT" != "success" ]; then
+            echo "::error::gitleaks result is $GITLEAKS_RESULT"
+            exit 1
+          fi
+          echo "All required CI jobs passed."

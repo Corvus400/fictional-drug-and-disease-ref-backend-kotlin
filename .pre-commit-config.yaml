@@ -1,7 +1,5 @@
-# CI を置かない（private 期間）代わりに全 gate をローカルで担保する。
-# stages 分離: pre-commit = spotless (ratchet で変更ファイルのみ高速 check)
-#              pre-push   = detekt (compileKotlin 経由で重い) + test (旧 CI gate を集約)
-# -Pprecommit=true は detekt 公式 pre-commit ガイド推奨の Configuration Cache 再利用 property。
+# pre-commit = spotless (ratchet で変更ファイルのみ高速 check)
+# 重い test / detekt / contract / image / gitleaks gate は GitHub Actions CI に移管する。
 repos:
   - repo: local
     hooks:
@@ -10,26 +8,5 @@ repos:
         entry: scripts/pre-commit-spotless-check.sh
         language: system
         stages: [pre-commit]
-        pass_filenames: false
-        always_run: true
-      - id: gradle-detekt-main
-        name: detekt main (push gate)
-        entry: scripts/pre-push-detekt-main.sh
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-      - id: gradle-detekt-test
-        name: detekt test (push gate)
-        entry: scripts/pre-push-detekt-test.sh
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-      - id: gradle-test
-        name: gradle test (push gate, ex-CI)
-        entry: scripts/pre-push-test.sh
-        language: system
-        stages: [pre-push]
         pass_filenames: false
         always_run: true
