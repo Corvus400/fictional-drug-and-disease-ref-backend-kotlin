@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
-import javax.sql.DataSource
 
 fun hikariDataSource(cfg: DatabaseConfig): HikariDataSource =
     HikariDataSource(
@@ -31,15 +30,21 @@ fun Application.configureDatabase() {
         .load()
         .migrate()
     val database = Database.connect(dataSource)
-    dependencies {
-        provide<DataSource> { dataSource }
-        provide<Database> { database }
-    }
+    configureDataLayerDependencies(dataSource = dataSource, database = database)
 }
 
-suspend fun <T> dbQuery(block: suspend () -> T): T =
+suspend fun <T> dbQuery(
+    database: Database? = null,
+    block: suspend () -> T,
+): T =
     withContext(Dispatchers.IO) {
-        suspendTransaction {
-            block()
+        if (database == null) {
+            suspendTransaction {
+                block()
+            }
+        } else {
+            suspendTransaction(db = database) {
+                block()
+            }
         }
     }
