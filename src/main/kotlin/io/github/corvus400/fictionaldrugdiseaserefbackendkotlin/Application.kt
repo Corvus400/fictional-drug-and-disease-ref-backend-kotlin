@@ -1,6 +1,7 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDI
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDatabase
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureLogging
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureRouting
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureSerialization
@@ -16,5 +17,6 @@ fun Application.module() {
     configureSerialization()
     configureStatusPages()
     configureDI()
+    configureDatabase()
     configureRouting()
 }
