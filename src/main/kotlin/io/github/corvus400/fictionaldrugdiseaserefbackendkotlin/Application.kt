@@ -7,16 +7,21 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configure
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureSerialization
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureStatusPages
 import io.ktor.server.application.Application
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
 }
 
-fun Application.module() {
+fun Application.module(databaseDispatcher: CoroutineDispatcher = productionDatabaseDispatcher()) {
     configureLogging()
     configureSerialization()
     configureStatusPages()
     configureDI()
-    configureDatabase()
+    configureDatabase(databaseDispatcher = databaseDispatcher)
     configureRouting()
 }
+
+@Suppress("InjectDispatcher")
+private fun productionDatabaseDispatcher(): CoroutineDispatcher = Dispatchers.IO

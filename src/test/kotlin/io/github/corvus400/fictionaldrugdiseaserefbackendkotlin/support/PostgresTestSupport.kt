@@ -5,6 +5,8 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.DatabaseC
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.hikariDataSource
 import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.testing.TestApplicationBuilder
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.testcontainers.containers.PostgreSQLContainer
@@ -38,6 +40,9 @@ object PostgresTestSupport {
     val database: Database by lazy {
         Database.connect(dataSource)
     }
+
+    @Suppress("InjectDispatcher")
+    val databaseDispatcher: CoroutineDispatcher = Dispatchers.IO
 
     fun TestApplicationBuilder.withPostgresConfig() {
         environment {

@@ -12,7 +12,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DrugListQueryServiceTest {
-    private val service = DrugListQueryService(ExposedDrugRepository(PostgresTestSupport.database))
+    private val service = DrugListQueryService(
+        ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        ),
+    )
 
     @Test
     fun `default list uses mock revised_at descending order and pagination`() = runBlocking {

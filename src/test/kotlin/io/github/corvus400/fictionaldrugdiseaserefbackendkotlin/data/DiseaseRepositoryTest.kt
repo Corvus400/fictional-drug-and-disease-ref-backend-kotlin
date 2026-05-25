@@ -11,7 +11,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DiseaseRepositoryTest {
-    private val repository = ExposedDiseaseRepository(PostgresTestSupport.database)
+    private val repository = ExposedDiseaseRepository(
+        database = PostgresTestSupport.database,
+        databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+    )
 
     @Test
     fun `findAll returns all seeded diseases`() = runBlocking {

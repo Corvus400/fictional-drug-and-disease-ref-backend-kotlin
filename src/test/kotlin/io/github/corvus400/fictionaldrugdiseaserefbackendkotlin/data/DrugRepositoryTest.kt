@@ -10,7 +10,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DrugRepositoryTest {
-    private val repository = ExposedDrugRepository(PostgresTestSupport.database)
+    private val repository = ExposedDrugRepository(
+        database = PostgresTestSupport.database,
+        databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+    )
 
     @Test
     fun `findAll returns all seeded drugs`() = runBlocking {

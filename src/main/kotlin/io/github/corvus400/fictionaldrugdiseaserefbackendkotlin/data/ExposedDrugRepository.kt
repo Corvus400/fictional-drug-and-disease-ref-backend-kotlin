@@ -5,14 +5,18 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.DrugsTab
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
+import kotlinx.coroutines.CoroutineDispatcher
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.selectAll
 
-class ExposedDrugRepository(private val database: Database) : DrugRepository {
+class ExposedDrugRepository(
+    private val database: Database,
+    private val databaseDispatcher: CoroutineDispatcher,
+) : DrugRepository {
     override suspend fun findByPublicId(publicId: String): AppResult<Drug> =
         queryUnexpectedAsFailure {
-            dbQuery(database) {
+            dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 DrugsTable
                     .selectAll()
                     .where { DrugsTable.publicId eq publicId }
@@ -25,7 +29,7 @@ class ExposedDrugRepository(private val database: Database) : DrugRepository {
 
     override suspend fun findAll(): AppResult<List<Drug>> =
         queryUnexpectedAsFailure {
-            dbQuery(database) {
+            dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 AppResult.Success(
                     DrugsTable
                         .selectAll()

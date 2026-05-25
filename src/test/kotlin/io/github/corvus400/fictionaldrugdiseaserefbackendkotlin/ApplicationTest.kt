@@ -1,5 +1,6 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin
 
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
@@ -12,7 +13,7 @@ class ApplicationTest {
     @Test
     fun `health endpoint returns ok`() = testApplication {
         withPostgresConfig()
-        application { module() }
+        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("""{"status":"ok"}""", response.bodyAsText())

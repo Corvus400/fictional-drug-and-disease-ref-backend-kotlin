@@ -8,6 +8,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DiseaseLis
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DrugListQueryService
 import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
+import kotlinx.coroutines.CoroutineDispatcher
 import org.jetbrains.exposed.v1.jdbc.Database
 import javax.sql.DataSource
 
@@ -20,12 +21,21 @@ fun Application.configureDI() {
     }
 }
 
-fun Application.configureDataLayerDependencies(dataSource: DataSource, database: Database) {
+fun Application.configureDataLayerDependencies(
+    dataSource: DataSource,
+    database: Database,
+    databaseDispatcher: CoroutineDispatcher,
+) {
     dependencies {
         provide<DataSource> { dataSource }
         provide<Database> { database }
-        provide<DrugRepository> { ExposedDrugRepository(database) }
-        provide<DiseaseRepository> { ExposedDiseaseRepository(database) }
+        provide<CoroutineDispatcher> { databaseDispatcher }
+        provide<DrugRepository> {
+            ExposedDrugRepository(database = database, databaseDispatcher = databaseDispatcher)
+        }
+        provide<DiseaseRepository> {
+            ExposedDiseaseRepository(database = database, databaseDispatcher = databaseDispatcher)
+        }
         provide<DrugListQueryService> { DrugListQueryService(resolve()) }
         provide<DiseaseListQueryService> { DiseaseListQueryService(resolve()) }
     }

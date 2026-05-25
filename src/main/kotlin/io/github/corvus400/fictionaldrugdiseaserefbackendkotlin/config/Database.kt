@@ -4,7 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -22,7 +22,7 @@ fun hikariDataSource(cfg: DatabaseConfig): HikariDataSource =
         },
     )
 
-fun Application.configureDatabase() {
+fun Application.configureDatabase(databaseDispatcher: CoroutineDispatcher) {
     val cfg: DatabaseConfig by dependencies
     val dataSource = hikariDataSource(cfg)
     Flyway.configure()
@@ -31,14 +31,19 @@ fun Application.configureDatabase() {
         .load()
         .migrate()
     val database = Database.connect(dataSource)
-    configureDataLayerDependencies(dataSource = dataSource, database = database)
+    configureDataLayerDependencies(
+        dataSource = dataSource,
+        database = database,
+        databaseDispatcher = databaseDispatcher,
+    )
 }
 
 suspend fun <T> dbQuery(
     database: Database? = null,
+    databaseDispatcher: CoroutineDispatcher,
     block: suspend () -> T,
 ): T =
-    withContext(Dispatchers.IO) {
+    withContext(databaseDispatcher) {
         if (database == null) {
             suspendTransaction {
                 block()

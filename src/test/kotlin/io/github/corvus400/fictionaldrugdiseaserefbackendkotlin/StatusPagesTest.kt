@@ -8,6 +8,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemDetails
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemTypes
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
@@ -26,7 +27,7 @@ class StatusPagesTest {
     @Test
     fun `unmatched route returns problem json 404`() = testApplication {
         withPostgresConfig()
-        application { module() }
+        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
         val response = client.get("/definitely-not-a-route")
         assertEquals(HttpStatusCode.NotFound, response.status)
         assertEquals(ContentType("application", "problem+json"), response.contentType()?.withoutParameters())
@@ -39,7 +40,7 @@ class StatusPagesTest {
     fun `thrown DomainException renders problem json`() = testApplication {
         withPostgresConfig()
         application {
-            module()
+            module(databaseDispatcher = PostgresTestSupport.databaseDispatcher)
             routing {
                 get("/__test/not-found") {
                     throw DomainException(DomainError.NotFound("drug", "drug_9999"))
@@ -57,7 +58,7 @@ class StatusPagesTest {
     fun `respondResult failure renders problem json`() = testApplication {
         withPostgresConfig()
         application {
-            module()
+            module(databaseDispatcher = PostgresTestSupport.databaseDispatcher)
             routing {
                 get("/__test/validation") {
                     call.respondResult<String>(
@@ -81,7 +82,7 @@ class StatusPagesTest {
     fun `unexpected exception does not leak cause message`() = testApplication {
         withPostgresConfig()
         application {
-            module()
+            module(databaseDispatcher = PostgresTestSupport.databaseDispatcher)
             routing {
                 get("/__test/boom") {
                     throw IllegalStateException("SECRET internal detail")
