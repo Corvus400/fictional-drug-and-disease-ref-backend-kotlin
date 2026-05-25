@@ -1,5 +1,8 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDI
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDataLayerDependencies
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureLogging
@@ -13,9 +16,11 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.Postgres
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
+import org.slf4j.LoggerFactory
 import java.io.PrintWriter
 import java.sql.Connection
 import java.sql.SQLException
@@ -24,7 +29,9 @@ import javax.sql.DataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import ch.qos.logback.classic.Logger as LogbackLogger
 
 class ObservabilityTest {
     @Test
@@ -44,15 +51,45 @@ class ObservabilityTest {
     }
 
     @Test
-    fun `metrics endpoint allows loopback even when forwarded header is public`() = testApplication {
-        withPostgresConfig()
-        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+    fun `metrics endpoint allows loopback and exposes prometheus metrics even when forwarded header is public`() =
+        testApplication {
+            withPostgresConfig()
+            application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
-        val response = client.get("/metrics") {
-            header(HttpHeaders.XForwardedFor, "8.8.8.8")
+            client.get("/health")
+            val response = client.get("/metrics") {
+                header(HttpHeaders.XForwardedFor, "8.8.8.8")
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("ktor_http_server"), body)
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
+    @Test
+    fun `request id response header matches call id MDC in request log`() = testApplication {
+        withPostgresConfig()
+        val logger = LoggerFactory.getLogger("io.ktor.test") as LogbackLogger
+        val appender = ListAppender<ILoggingEvent>().apply {
+            start()
+        }
+        logger.addAppender(appender)
+        application { module(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+
+        try {
+            val response = client.get("/health")
+            val requestId = response.headers[HttpHeaders.XRequestId]
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertNotNull(requestId)
+            assertTrue(
+                appender.list.any { event ->
+                    event.level == Level.INFO && event.mdcPropertyMap["call_id"] == requestId
+                },
+            )
+        } finally {
+            logger.detachAppender(appender)
+        }
     }
 
     @Test
