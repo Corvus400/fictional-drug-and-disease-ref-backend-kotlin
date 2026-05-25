@@ -11,6 +11,9 @@ import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 
+private const val DATABASE_CONNECTION_TIMEOUT_MS = 1_000L
+private const val DATABASE_VALIDATION_TIMEOUT_MS = 1_000L
+
 fun hikariDataSource(cfg: DatabaseConfig): HikariDataSource =
     HikariDataSource(
         HikariConfig().apply {
@@ -18,6 +21,8 @@ fun hikariDataSource(cfg: DatabaseConfig): HikariDataSource =
             username = cfg.user
             password = cfg.password
             maximumPoolSize = cfg.maxPoolSize
+            connectionTimeout = DATABASE_CONNECTION_TIMEOUT_MS
+            validationTimeout = DATABASE_VALIDATION_TIMEOUT_MS
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
         },
