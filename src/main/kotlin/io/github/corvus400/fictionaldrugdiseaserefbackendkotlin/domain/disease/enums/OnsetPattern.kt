@@ -43,8 +43,9 @@ enum class OnsetPattern {
         /**
          * `/diseases?onset_pattern=...` クエリ値 ([raw]) を enum 定数名 (例: `ACUTE`) として解決する。
          *
-         * 未知の値は [IllegalArgumentException] を投げ、Route 層で 400 + `INVALID_ONSET_PATTERN`
-         * の `ErrorResponse` に変換される。`runCatching {} .getOrNull()` 等での握りつぶし禁止
+         * 未知の値は [IllegalArgumentException] を投げ、Route 層 (Phase 4) で
+         * `DomainError.Validation` に変換され 422 problem+json (`type` = .../validation,
+         * `errors[].field`) としてレンダリングされる。`runCatching {} .getOrNull()` 等での握りつぶし禁止
          * (基本方針 10: エラー可視性)。
          */
         fun fromQueryOrThrow(raw: String): OnsetPattern =
