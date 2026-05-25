@@ -157,7 +157,7 @@ multiple human operators.
 
 ### コミット前 / push ゲート
 
-ローカル hook は pre-commit の Spotless ratchet を維持します。重い pre-push gate は CI に移管します。
+ローカル hook は commit 前の gitleaks と pre-commit の Spotless ratchet を維持します。重い pre-push gate は CI に移管します。
 
 ```bash
 brew install pre-commit
@@ -171,7 +171,8 @@ pre-commit run --hook-stage pre-commit
 ```
 
 - `pre-commit` stage: `git fetch origin main` 後に `./gradlew spotlessCheck -Pspotless.ratchet=true`
-- CI gate: `test` / `spotlessCheck` / `detektMain` / `detektTest` / OpenAPI contract / gitleaks / image build
+- global git `pre-commit`: staged diff を `gitleaks git --pre-commit --staged --redact --verbose .` で scan
+- CI gate: `test` / `spotlessCheck` / `detektMain` / `detektTest` / OpenAPI contract / image build
 - Markdown・Shell・YAML など対象外ファイルだけの変更では、pre-commit hook は何もせず成功終了する
 - 全件確認: `pre-commit run --all-files`
 
