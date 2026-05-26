@@ -82,20 +82,6 @@ if ! container system status > /dev/null 2>&1; then
     container system start
 fi
 
-cleanup_duplicate_runtime_processes() {
-    local process_count
-    process_count="$( (pgrep -f "container-runtime-linux" 2>/dev/null || true) | wc -l | tr -d ' ')"
-    if [ "$process_count" -gt 1 ]; then
-        echo "WARNING: Found ${process_count} container-runtime-linux processes; cleaning up."
-        pkill -f "container-runtime-linux" 2>/dev/null || true
-        sleep 2
-        if pgrep -f "container-runtime-linux" > /dev/null 2>&1; then
-            pkill -9 -f "container-runtime-linux" 2>/dev/null || true
-        fi
-        container system start
-    fi
-}
-
 stop_existing_tunnel() {
     if [ ! -f "$TUNNEL_PID_FILE" ]; then
         return 0
@@ -241,7 +227,6 @@ wait_for_http_200() {
     return 1
 }
 
-cleanup_duplicate_runtime_processes
 if [ "$PUBLISH" = "true" ]; then
     stop_existing_tunnel
 fi
@@ -327,6 +312,7 @@ fi
 echo ""
 echo "Step 4/5: Waiting for application readiness..."
 wait_for_http_200 "http://${APP_IP}:${APP_PORT}/health/ready" "application readiness"
+wait_for_http_200 "http://127.0.0.1:${APP_PORT}/health/ready" "published localhost readiness"
 
 echo ""
 echo "Step 5/5: Verifying API data path..."
