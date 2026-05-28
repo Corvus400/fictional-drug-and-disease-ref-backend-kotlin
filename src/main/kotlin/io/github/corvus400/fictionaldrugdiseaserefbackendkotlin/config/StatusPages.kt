@@ -103,6 +103,13 @@ fun DomainError.toProblem(call: ApplicationCall): ProblemDetails = when (this) {
         detail = detail,
         instance = call.request.uri,
     )
+    is DomainError.PreconditionFailed -> ProblemDetails(
+        type = ProblemTypes.PRECONDITION_FAILED,
+        title = "Precondition Failed",
+        status = HttpStatusCode.PreconditionFailed.value,
+        detail = detail,
+        instance = call.request.uri,
+    )
     DomainError.Unauthorized -> ProblemDetails(
         type = ProblemTypes.UNAUTHORIZED,
         title = "Unauthorized",

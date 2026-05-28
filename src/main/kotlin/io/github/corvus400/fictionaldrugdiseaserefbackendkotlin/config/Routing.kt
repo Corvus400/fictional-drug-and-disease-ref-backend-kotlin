@@ -39,6 +39,7 @@ fun Application.configureRouting() {
     val categoriesService: CategoriesQueryService by dependencies
     val observabilityConfig: ObservabilityConfig by dependencies
     val securityConfig: SecurityConfig by dependencies
+    val imageStorageConfig: ImageStorageConfig by dependencies
     val metricsRegistry: PrometheusMeterRegistry by dependencies
     val dataSource: DataSource by dependencies
     routing {
@@ -94,7 +95,11 @@ fun Application.configureRouting() {
             adminTokenRoutes(securityConfig)
             authenticate(AUTH_JWT) {
                 requireScope("admin") {
-                    adminRoutes()
+                    adminRoutes(
+                        drugRepository = drugRepository,
+                        diseaseRepository = diseaseRepository,
+                        imageStorageConfig = imageStorageConfig,
+                    )
                 }
             }
         }
@@ -111,7 +116,10 @@ fun Application.configureRouting() {
             diseaseRoutes(repository = diseaseRepository, listService = diseaseListService)
             categoriesRoutes(service = categoriesService)
             dosageFormImageRoutes()
-            drugImageRoutes()
+            drugImageRoutes(
+                repository = drugRepository,
+                imageStorageConfig = imageStorageConfig,
+            )
         }
     }
 }

@@ -7,6 +7,7 @@ sealed interface DomainError {
     data class NotFound(val resource: String, val id: String) : DomainError
     data class Validation(val violations: List<FieldViolation>) : DomainError
     data class Conflict(val detail: String) : DomainError
+    data class PreconditionFailed(val detail: String) : DomainError
     data object Unauthorized : DomainError
     data object Forbidden : DomainError
     data class Unexpected(val cause: Throwable) : DomainError
