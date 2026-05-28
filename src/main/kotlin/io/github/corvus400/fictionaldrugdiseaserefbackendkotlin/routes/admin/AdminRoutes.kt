@@ -73,8 +73,7 @@ fun Route.adminRoutes(
                     revisedAt = LocalDate.now().toString(),
                 )
                 call.respondResult(
-                    drug.validateReferences(diseaseRepository)
-                        .thenCreateWith(drugRepository),
+                    drugRepository.create(drug),
                     successStatus = HttpStatusCode.Created,
                 )
             }
@@ -89,10 +88,7 @@ fun Route.adminRoutes(
                     revisedAt = LocalDate.now().toString(),
                 )
                 call.respondResult(
-                    disease.validateReferences(
-                        drugRepository = drugRepository,
-                        diseaseRepository = diseaseRepository,
-                    ).thenCreateWith(diseaseRepository),
+                    diseaseRepository.create(disease),
                     successStatus = HttpStatusCode.Created,
                 )
             }
@@ -118,10 +114,7 @@ fun Route.adminRoutes(
                             revisedAt = currentRevisionDate(),
                         )
                         call.respondResult(
-                            disease.validateReferences(
-                                drugRepository = drugRepository,
-                                diseaseRepository = diseaseRepository,
-                            ).thenUpdateWith(diseaseRepository, expectedUpdatedAt),
+                            diseaseRepository.update(disease, expectedUpdatedAt),
                         )
                     }
                 }
@@ -155,10 +148,7 @@ fun Route.adminRoutes(
                     is AppResult.Failure -> call.respondResult(patched)
                     is AppResult.Success -> {
                         call.respondResult(
-                            patched.value.validateReferences(
-                                drugRepository = drugRepository,
-                                diseaseRepository = diseaseRepository,
-                            ).thenUpdateWith(diseaseRepository, expectedUpdatedAt),
+                            diseaseRepository.update(patched.value, expectedUpdatedAt),
                         )
                     }
                 }
@@ -186,7 +176,7 @@ fun Route.adminRoutes(
                             hasUploadedDrugImage = hasUploadedDrugImage(id, imageStorageConfig),
                         )
                         call.respondResult(
-                            drug.validateReferences(diseaseRepository).thenUpdateWith(drugRepository, expectedUpdatedAt)
+                            drugRepository.update(drug, expectedUpdatedAt)
                         )
                     }
                 }
@@ -228,8 +218,7 @@ fun Route.adminRoutes(
                     is AppResult.Failure -> call.respondResult(patched)
                     is AppResult.Success -> {
                         call.respondResult(
-                            patched.value.validateReferences(diseaseRepository)
-                                .thenUpdateWith(drugRepository, expectedUpdatedAt)
+                            drugRepository.update(patched.value, expectedUpdatedAt)
                         )
                     }
                 }
@@ -248,18 +237,18 @@ fun Route.adminRoutes(
         when (val current = drugRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
-                when (val imageBytes = call.receivePngUpload(imageStorageConfig.maxUploadBytes)) {
-                    is AppResult.Failure -> call.respondResult(imageBytes)
+                when (
+                    val tempImage = call.receivePngUploadTempFile(
+                        uploadDir = imageStorageConfig.uploadDir,
+                        drugId = id,
+                        maxUploadBytes = imageStorageConfig.maxUploadBytes,
+                    )
+                ) {
+                    is AppResult.Failure -> call.respondResult(tempImage)
                     is AppResult.Success -> {
                         val imagePath = imageStorageConfig.uploadDir.resolve("$id.png").normalize()
-                        when (
-                            val tempImage = writeTempUploadedImage(
-                                uploadDir = imageStorageConfig.uploadDir,
-                                drugId = id,
-                                bytes = imageBytes.value,
-                            )
-                        ) {
-                            is AppResult.Failure -> call.respondResult(tempImage)
+                        when (val replacement = replaceUploadedImage(tempImage.value, imagePath)) {
+                            is AppResult.Failure -> call.respondResult(replacement)
                             is AppResult.Success -> {
                                 val updatedDrug = current.value.copy(
                                     revisedAt = currentRevisionDate(),
@@ -267,12 +256,19 @@ fun Route.adminRoutes(
                                 )
                                 when (val update = drugRepository.update(updatedDrug, expectedUpdatedAt)) {
                                     is AppResult.Failure -> {
-                                        deleteUploadedImage(tempImage.value)
-                                        call.respondResult(update)
+                                        when (
+                                            val rollback = rollbackUploadedImageReplacement(
+                                                imagePath = imagePath,
+                                                replacement = replacement.value,
+                                            )
+                                        ) {
+                                            is AppResult.Failure -> call.respondResult(rollback)
+                                            is AppResult.Success -> call.respondResult(update)
+                                        }
                                     }
                                     is AppResult.Success -> {
-                                        when (val promote = promoteUploadedImage(tempImage.value, imagePath)) {
-                                            is AppResult.Failure -> call.respondResult(promote)
+                                        when (val commit = commitUploadedImageReplacement(replacement.value)) {
+                                            is AppResult.Failure -> call.respondResult(commit)
                                             is AppResult.Success -> call.respondResult(update)
                                         }
                                     }
@@ -408,113 +404,4 @@ private inline fun <T : Any, R : Any> AppResult<T>.mapSuccess(transform: (T) -> 
     when (this) {
         is AppResult.Failure -> this
         is AppResult.Success -> AppResult.Success(transform(value))
-    }
-
-private suspend fun Drug.validateReferences(diseaseRepository: DiseaseRepository): AppResult<Drug> {
-    val violations = mutableListOf<FieldViolation>()
-    val lookupFailure = relatedDiseaseIds.validateExistingIds(
-        field = "related_disease_ids",
-        expectedPrefix = "disease",
-        repositoryFind = diseaseRepository::findByPublicId,
-        violations = violations,
-    )
-    return when {
-        lookupFailure != null -> AppResult.Failure(lookupFailure)
-        violations.isNotEmpty() -> AppResult.Failure(DomainError.Validation(violations))
-        else -> AppResult.Success(this)
-    }
-}
-
-private suspend fun Disease.validateReferences(
-    drugRepository: DrugRepository,
-    diseaseRepository: DiseaseRepository,
-): AppResult<Disease> {
-    val violations = mutableListOf<FieldViolation>()
-    val drugLookupFailure = relatedDrugIds.validateExistingIds(
-        field = "related_drug_ids",
-        expectedPrefix = "drug",
-        repositoryFind = drugRepository::findByPublicId,
-        violations = violations,
-    )
-    val diseaseLookupFailure = relatedDiseaseIds
-        .filterNot { relatedId ->
-            (relatedId == id).also { isSelf ->
-                if (isSelf) {
-                    violations += FieldViolation(
-                        field = "related_disease_ids",
-                        reason = "Disease must not reference itself: $relatedId",
-                    )
-                }
-            }
-        }
-        .validateExistingIds(
-            field = "related_disease_ids",
-            expectedPrefix = "disease",
-            repositoryFind = diseaseRepository::findByPublicId,
-            violations = violations,
-        )
-    return when {
-        drugLookupFailure != null -> AppResult.Failure(drugLookupFailure)
-        diseaseLookupFailure != null -> AppResult.Failure(diseaseLookupFailure)
-        violations.isNotEmpty() -> AppResult.Failure(DomainError.Validation(violations))
-        else -> AppResult.Success(this)
-    }
-}
-
-private suspend fun List<String>.validateExistingIds(
-    field: String,
-    expectedPrefix: String,
-    repositoryFind: suspend (String) -> AppResult<*>,
-    violations: MutableList<FieldViolation>,
-): DomainError? {
-    val pattern = Regex("""$expectedPrefix\_\d{4}""")
-    filterNot { id ->
-        pattern.matches(id).also { matches ->
-            if (!matches) {
-                violations += FieldViolation(field = field, reason = "Invalid $field id: $id")
-            }
-        }
-    }
-    filter { pattern.matches(it) }.forEach { id ->
-        when (val lookup = repositoryFind(id)) {
-            is AppResult.Success -> Unit
-            is AppResult.Failure -> when (lookup.error) {
-                is DomainError.NotFound -> {
-                    violations += FieldViolation(field = field, reason = "Unknown $field id: $id")
-                }
-                else -> return lookup.error
-            }
-        }
-    }
-    return null
-}
-
-private suspend fun AppResult<Drug>.thenCreateWith(repository: DrugRepository): AppResult<Drug> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.create(value)
-    }
-
-private suspend fun AppResult<Drug>.thenUpdateWith(
-    repository: DrugRepository,
-    expectedUpdatedAt: LocalDateTime,
-): AppResult<Drug> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.update(value, expectedUpdatedAt)
-    }
-
-private suspend fun AppResult<Disease>.thenCreateWith(repository: DiseaseRepository): AppResult<Disease> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.create(value)
-    }
-
-private suspend fun AppResult<Disease>.thenUpdateWith(
-    repository: DiseaseRepository,
-    expectedUpdatedAt: LocalDateTime,
-): AppResult<Disease> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.update(value, expectedUpdatedAt)
     }

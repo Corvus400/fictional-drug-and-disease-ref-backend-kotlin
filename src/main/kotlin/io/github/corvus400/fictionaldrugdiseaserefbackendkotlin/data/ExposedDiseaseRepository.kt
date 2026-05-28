@@ -5,11 +5,13 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.Diseases
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.DrugsTable
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.datetime.CurrentDateTime
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -29,6 +31,9 @@ class ExposedDiseaseRepository(
                     return dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                         val publicId = nextDiseasePublicId()
                         val created = disease.copy(id = publicId)
+                        validateReferences(created)?.let { error ->
+                            return@dbQuery AppResult.Failure(error)
+                        }
                         DiseasesTable.insert {
                             it[DiseasesTable.publicId] = publicId
                             it[data] = created
@@ -47,6 +52,9 @@ class ExposedDiseaseRepository(
     override suspend fun update(disease: Disease): AppResult<Disease> =
         queryUnexpectedAsFailure {
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                validateReferences(disease)?.let { error ->
+                    return@dbQuery AppResult.Failure(error)
+                }
                 val updatedRows = DiseasesTable.update({ DiseasesTable.publicId eq disease.id }) {
                     it[data] = disease
                     it[updatedAt] = CurrentDateTime
@@ -65,6 +73,9 @@ class ExposedDiseaseRepository(
     ): AppResult<Disease> =
         queryUnexpectedAsFailure {
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                validateReferences(disease)?.let { error ->
+                    return@dbQuery AppResult.Failure(error)
+                }
                 val updatedRows = DiseasesTable.update({
                     (DiseasesTable.publicId eq disease.id) and (DiseasesTable.updatedAt eq expectedUpdatedAt)
                 }) {
@@ -206,10 +217,78 @@ class ExposedDiseaseRepository(
             .where { DiseasesTable.publicId eq publicId }
             .singleOrNull() != null
 
+    private fun validateReferences(disease: Disease): DomainError? {
+        val violations = mutableListOf<FieldViolation>()
+        collectMissingPublicIds(
+            ids = disease.relatedDrugIds,
+            field = RELATED_DRUG_IDS_FIELD,
+            pattern = DRUG_ID_PATTERN,
+            existingIds = { ids ->
+                DrugsTable
+                    .selectAll()
+                    .where { DrugsTable.publicId inList ids }
+                    .map { row -> row[DrugsTable.publicId] }
+                    .toSet()
+            },
+            violations = violations,
+        )
+        disease.relatedDiseaseIds
+            .filter { relatedId -> relatedId == disease.id }
+            .forEach { relatedId ->
+                violations += FieldViolation(
+                    field = RELATED_DISEASE_IDS_FIELD,
+                    reason = "Disease must not reference itself: $relatedId",
+                )
+            }
+        collectMissingPublicIds(
+            ids = disease.relatedDiseaseIds.filterNot { relatedId -> relatedId == disease.id },
+            field = RELATED_DISEASE_IDS_FIELD,
+            pattern = DISEASE_ID_PATTERN,
+            existingIds = { ids ->
+                DiseasesTable
+                    .selectAll()
+                    .where { DiseasesTable.publicId inList ids }
+                    .map { row -> row[DiseasesTable.publicId] }
+                    .toSet()
+            },
+            violations = violations,
+        )
+        return violations
+            .takeIf { it.isNotEmpty() }
+            ?.let(DomainError::Validation)
+    }
+
     private companion object {
         const val DISEASE_ID_PREFIX = "disease_"
+        const val RELATED_DRUG_IDS_FIELD = "related_drug_ids"
+        const val RELATED_DISEASE_IDS_FIELD = "related_disease_ids"
         const val PUBLIC_ID_CREATE_MAX_ATTEMPTS = 8
+        val DRUG_ID_PATTERN = Regex("""drug\_\d{4}""")
+        val DISEASE_ID_PATTERN = Regex("""disease\_\d{4}""")
     }
 }
 
 private fun ExposedSQLException.isUniqueViolation(): Boolean = sqlState == "23505"
+
+private fun collectMissingPublicIds(
+    ids: List<String>,
+    field: String,
+    pattern: Regex,
+    existingIds: (List<String>) -> Set<String>,
+    violations: MutableList<FieldViolation>,
+) {
+    val validIds = ids.filter { id ->
+        pattern.matches(id).also { matches ->
+            if (!matches) {
+                violations += FieldViolation(field = field, reason = "Invalid $field id: $id")
+            }
+        }
+    }
+    if (validIds.isEmpty()) return
+    val existing = existingIds(validIds)
+    validIds
+        .filterNot { id -> id in existing }
+        .forEach { id ->
+            violations += FieldViolation(field = field, reason = "Unknown $field id: $id")
+        }
+}
