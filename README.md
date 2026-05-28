@@ -102,6 +102,20 @@ Use `/health` for restart decisions and `/health/ready` for traffic routing. A t
 
 `/metrics` exposes Prometheus metrics and is guarded by a CIDR allowlist based on the real socket peer address. The default allowlist is intended for local and private-network operational access. Cloudflare Tunnel deployment adds an edge-level `/metrics` block so public traffic cannot scrape internal metrics.
 
+### Admin Access
+
+Admin routes live under `/v1/admin` and are reachable only through the local
+admin connector. The public connector returns the same problem+json 404 shape as
+an unknown route for `/v1/admin/*`, including preflight requests. Do not point
+Cloudflare Tunnel or another public edge at the admin connector.
+
+`POST /v1/admin/token` is an unauthenticated local bootstrap endpoint for
+development tools and the CMS. It trusts local reachability; any process that can
+reach the admin connector can mint an admin JWT. Use this only on a trusted
+single-user development host, keep `JWT_SECRET` in the environment, and do not
+paste tokens into logs, issues, pull requests, or screenshots. For CLI use,
+`./gradlew printAdminToken` prints a token signed with `JWT_SECRET`.
+
 ### Local Verification
 
 ```bash
@@ -151,9 +165,10 @@ Keep the generated `cloudflared/config.yml`, tunnel credentials, and PID/log
 files out of Git. If credentials are exposed, revoke or recreate the tunnel.
 
 Cloudflare Access is intentionally not required for this fictional public API.
-Admin endpoints remain protected by the app's JWT layer. Add Access later only
-if the project starts handling real sensitive data, compliance requirements, or
-multiple human operators.
+Admin endpoints are not routed through the public tunnel; the app also keeps JWT
+authentication and admin-scope authorization on protected admin handlers. Add
+Access later only if the project starts handling real sensitive data, compliance
+requirements, or multiple human operators.
 
 ### コミット前 / push ゲート
 

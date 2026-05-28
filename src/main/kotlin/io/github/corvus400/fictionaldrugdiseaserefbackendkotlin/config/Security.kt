@@ -6,6 +6,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainException
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpMethod.Companion.Options
 import io.ktor.server.application.Application
 import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.install
@@ -76,19 +77,34 @@ fun Application.configureRateLimit() {
     }
 }
 
-fun Application.configureCors() {
-    val allowedOrigins = resolveConfig("CORS_ALLOWED_ORIGINS", "security.corsAllowedOrigins", default = "")
-        .split(",")
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
+fun Route.installCors(
+    allowedOrigins: List<String>,
+    allowedMethods: List<HttpMethod>,
+    exposedHeaders: List<String> = emptyList(),
+) {
     if (allowedOrigins.isEmpty()) return
     install(CORS) {
         allowedOrigins.forEach { origin ->
             allowHost(origin.removePrefix("https://").removePrefix("http://"), schemes = listOf("https", "http"))
         }
-        allowMethod(HttpMethod.Get)
+        (allowedMethods + Options).distinct().forEach(::allowMethod)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
+        exposedHeaders.forEach(::exposeHeader)
+    }
+}
+
+class AdminPortGateConfig {
+    var adminPort: Int = 0
+}
+
+class AdminGateNotFound : RuntimeException()
+
+val AdminPortGate = createRouteScopedPlugin("AdminPortGate", ::AdminPortGateConfig) {
+    onCall { call ->
+        if (call.request.local.localPort != pluginConfig.adminPort) {
+            throw AdminGateNotFound()
+        }
     }
 }
 

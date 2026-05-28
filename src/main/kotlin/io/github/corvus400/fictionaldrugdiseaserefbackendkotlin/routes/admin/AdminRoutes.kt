@@ -14,7 +14,7 @@ data class WhoAmIResponse(
 )
 
 fun Route.adminRoutes() {
-    get("/admin/whoami") {
+    get("/whoami") {
         val principal = checkNotNull(call.principal<JWTPrincipal>())
         val scopes = principal.payload.getClaim("scope")
             .asString()

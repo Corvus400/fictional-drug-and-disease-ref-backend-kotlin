@@ -20,6 +20,9 @@ import kotlinx.serialization.encodeToString
 
 fun Application.configureStatusPages() {
     install(StatusPages) {
+        exception<AdminGateNotFound> { call, _ ->
+            call.respondCanonicalNotFound()
+        }
         exception<DomainException> { call, cause ->
             call.respondProblem(cause.error.toProblem(call))
         }
@@ -29,15 +32,7 @@ fun Application.configureStatusPages() {
             call.respondProblem(DomainError.Unexpected(cause).toProblem(call))
         }
         status(HttpStatusCode.NotFound) { call, status ->
-            call.respondProblem(
-                ProblemDetails(
-                    type = ProblemTypes.NOT_FOUND,
-                    title = "Resource not found",
-                    status = status.value,
-                    detail = "No route matched ${call.request.uri}",
-                    instance = call.request.uri,
-                ),
-            )
+            call.respondCanonicalNotFound(status)
         }
         status(HttpStatusCode.TooManyRequests) { call, status ->
             val retryAfter = call.response.headers["Retry-After"]
@@ -56,6 +51,18 @@ fun Application.configureStatusPages() {
             )
         }
     }
+}
+
+suspend fun ApplicationCall.respondCanonicalNotFound(status: HttpStatusCode = HttpStatusCode.NotFound) {
+    respondProblem(
+        ProblemDetails(
+            type = ProblemTypes.NOT_FOUND,
+            title = "Resource not found",
+            status = status.value,
+            detail = "No route matched ${request.uri}",
+            instance = request.uri,
+        ),
+    )
 }
 
 suspend inline fun <reified T : Any> ApplicationCall.respondResult(

@@ -1,6 +1,5 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin
 
-import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureCors
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDI
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureDatabase
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureForwardedHeaders
@@ -13,13 +12,38 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configure
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureSerialization
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureStatusPages
 import io.ktor.server.application.Application
+import io.ktor.server.engine.CommandLineConfig
+import io.ktor.server.engine.EmbeddedServer
+import io.ktor.server.engine.EngineConnectorBuilder
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.engine.loadCommonConfiguration
+import io.ktor.server.netty.Netty
+import io.ktor.server.netty.NettyApplicationEngine
 import io.ktor.server.plugins.di.dependencies
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
 fun main(args: Array<String>) {
-    io.ktor.server.netty.EngineMain.main(args)
+    createConfiguredServer(args).start(wait = true)
+}
+
+fun createConfiguredServer(
+    args: Array<String>,
+): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> {
+    val cli = CommandLineConfig(args)
+    val deploymentConfig = cli.rootConfig.environment.config.config("ktor.deployment")
+    val adminPort = cli.rootConfig.environment.config.property("security.adminPort").getString().toInt()
+    return embeddedServer(Netty, rootConfig = cli.rootConfig) {
+        takeFrom(cli.engineConfig)
+        loadCommonConfiguration(deploymentConfig)
+        connectors.add(
+            EngineConnectorBuilder().apply {
+                host = "127.0.0.1"
+                port = adminPort
+            },
+        )
+    }
 }
 
 fun Application.module() {
@@ -30,7 +54,6 @@ fun Application.moduleWithDatabaseDispatcher(databaseDispatcher: CoroutineDispat
     configureForwardedHeaders()
     configureLogging()
     configureSerialization()
-    configureCors()
     configureStatusPages()
     configureDI()
     configureDatabase(databaseDispatcher = databaseDispatcher)

@@ -12,6 +12,9 @@ data class SecurityConfig(
     val rateLimitLimit: Int,
     val rateLimitRefillSeconds: Long,
     val corsAllowedOrigins: List<String>,
+    val adminPort: Int,
+    val adminCorsAllowedOrigins: List<String>,
+    val adminTokenTtlSeconds: Long,
 )
 
 fun Application.loadSecurityConfig(appEnv: String): SecurityConfig =
@@ -30,6 +33,20 @@ fun Application.loadSecurityConfig(appEnv: String): SecurityConfig =
             .split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() },
+        adminPort = resolveConfig("ADMIN_PORT", "security.adminPort", default = "19090").toInt(),
+        adminCorsAllowedOrigins = resolveConfig(
+            "ADMIN_CORS_ALLOWED_ORIGINS",
+            "security.adminCorsAllowedOrigins",
+            default = "",
+        )
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() },
+        adminTokenTtlSeconds = resolveConfig(
+            "ADMIN_TOKEN_TTL_SECONDS",
+            "security.adminTokenTtlSeconds",
+            default = "3600",
+        ).toLong(),
     )
 
 private fun Application.resolveJwtSecret(appEnv: String): String =
