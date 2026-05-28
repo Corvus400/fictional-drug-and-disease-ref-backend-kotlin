@@ -1,5 +1,6 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config
 
+import io.ktor.http.ContentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -20,5 +21,6 @@ val AppJson: Json = Json {
 fun Application.configureSerialization() {
     install(ContentNegotiation) {
         json(AppJson)
+        json(AppJson, contentType = ContentType("application", "merge-patch+json"))
     }
 }

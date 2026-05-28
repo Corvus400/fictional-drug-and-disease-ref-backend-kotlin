@@ -94,7 +94,10 @@ fun Application.configureRouting() {
             adminTokenRoutes(securityConfig)
             authenticate(AUTH_JWT) {
                 requireScope("admin") {
-                    adminRoutes()
+                    adminRoutes(
+                        drugRepository = drugRepository,
+                        diseaseRepository = diseaseRepository,
+                    )
                 }
             }
         }
