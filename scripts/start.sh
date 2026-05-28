@@ -31,8 +31,10 @@ CMS_ADMIN_TOKEN_PATH="${CMS_ADMIN_TOKEN_PATH:-/v1/admin/token}"
 CMS_PID_FILE="$PROJECT_DIR/.cms.pid"
 CMS_LOG="$PROJECT_DIR/.cms.log"
 CMS_LAUNCHD_LABEL="io.github.corvus400.fictionaldrugref.cms.dev"
+CMS_STARTED="false"
 TUNNEL_NAME="fictional-drugref-backend"
 TUNNEL_HOSTNAME="${TUNNEL_HOSTNAME:-fictional-drugref.win}"
+PUBLIC_READINESS_REQUIRED="${PUBLIC_READINESS_REQUIRED:-false}"
 CLOUDFLARED_DIR="$PROJECT_DIR/cloudflared"
 CLOUDFLARED_CONFIG="$CLOUDFLARED_DIR/config.yml"
 TUNNEL_PID_FILE="$PROJECT_DIR/.cloudflared.pid"
@@ -72,7 +74,7 @@ fi
 
 if [ -z "${CMS_ENABLED+x}" ]; then
     if [ "$PUBLISH" = "true" ]; then
-        CMS_ENABLED="false"
+        CMS_ENABLED="auto"
     else
         CMS_ENABLED="true"
     fi
@@ -260,8 +262,13 @@ start_tunnel() {
     echo "OK: Cloudflare Tunnel is running as PID ${pid}"
 
     local public_url="https://${TUNNEL_HOSTNAME}/health/ready"
-    wait_for_http_200 "$public_url" "public readiness"
-    echo "OK: Public readiness passed at $public_url"
+    if wait_for_http_200 "$public_url" "public readiness"; then
+        echo "OK: Public readiness passed at $public_url"
+    elif [ "$PUBLIC_READINESS_REQUIRED" = "true" ]; then
+        exit 1
+    else
+        echo "WARNING: Public readiness did not pass at $public_url; tunnel is running but edge availability was not confirmed."
+    fi
 }
 
 container_ip() {
@@ -304,20 +311,32 @@ wait_for_http_200() {
 }
 
 start_cms() {
-    if [ "$CMS_ENABLED" != "true" ]; then
+    if [ "$CMS_ENABLED" != "true" ] && [ "$CMS_ENABLED" != "auto" ]; then
         return 0
     fi
 
     if [ ! -d "$CMS_DIR" ]; then
+        if [ "$CMS_ENABLED" = "auto" ]; then
+            echo "WARNING: CMS auto mode skipped: CMS directory is missing: $CMS_DIR"
+            return 0
+        fi
         echo "ERROR: CMS directory is missing: $CMS_DIR"
         echo "Set CMS_DIR to the sibling CMS checkout or run CMS_ENABLED=false ./scripts/start.sh."
         exit 1
     fi
     if [ ! -f "$CMS_DIR/package.json" ]; then
+        if [ "$CMS_ENABLED" = "auto" ]; then
+            echo "WARNING: CMS auto mode skipped: CMS package.json is missing in $CMS_DIR."
+            return 0
+        fi
         echo "ERROR: CMS package.json is missing in $CMS_DIR."
         exit 1
     fi
     if [ ! -d "$CMS_DIR/node_modules" ]; then
+        if [ "$CMS_ENABLED" = "auto" ]; then
+            echo "WARNING: CMS auto mode skipped: CMS dependencies are not installed in $CMS_DIR."
+            return 0
+        fi
         echo "ERROR: CMS dependencies are not installed in $CMS_DIR."
         echo "Run pnpm install in the CMS checkout, or run CMS_ENABLED=false ./scripts/start.sh."
         exit 1
@@ -326,6 +345,10 @@ start_cms() {
     local cms_path
     pnpm_bin="$(command -v pnpm || true)"
     if [ -z "$pnpm_bin" ]; then
+        if [ "$CMS_ENABLED" = "auto" ]; then
+            echo "WARNING: CMS auto mode skipped: pnpm is required to start the CMS dev server."
+            return 0
+        fi
         echo "ERROR: pnpm is required to start the CMS dev server."
         exit 1
     fi
@@ -336,6 +359,10 @@ start_cms() {
     echo "Starting CMS dev server..."
     local pid
     if ! command -v launchctl > /dev/null 2>&1; then
+        if [ "$CMS_ENABLED" = "auto" ]; then
+            echo "WARNING: CMS auto mode skipped: launchctl is required to keep the CMS dev server running after start.sh exits."
+            return 0
+        fi
         echo "ERROR: launchctl is required to keep the CMS dev server running after start.sh exits."
         exit 1
     fi
@@ -351,13 +378,14 @@ start_cms() {
     pid="$(wait_for_launchd_pid "$CMS_LAUNCHD_LABEL" "$CMS_LOG" "CMS dev server")"
     echo "$pid" > "$CMS_PID_FILE"
     wait_for_http_200 "http://${CMS_HOST}:${CMS_PORT}/" "CMS dev server"
+    CMS_STARTED="true"
     echo "OK: CMS dev server is running as PID ${pid}"
 }
 
 if [ "$PUBLISH" = "true" ]; then
     stop_existing_tunnel
 fi
-if [ "$CMS_ENABLED" = "true" ]; then
+if [ "$CMS_ENABLED" = "true" ] || [ "$CMS_ENABLED" = "auto" ]; then
     stop_existing_cms
 fi
 
@@ -461,12 +489,12 @@ else
     exit 1
 fi
 
-if [ "$PUBLISH" = "true" ]; then
-    start_tunnel
-fi
 echo ""
 echo "Step 6/6: Starting CMS when enabled..."
 start_cms
+if [ "$PUBLISH" = "true" ]; then
+    start_tunnel
+fi
 
 echo ""
 echo "=== Backend started ==="
@@ -480,7 +508,7 @@ echo "  http://127.0.0.1:${APP_PORT}/health"
 echo "  http://127.0.0.1:${APP_PORT}/health/ready"
 echo "  http://127.0.0.1:${APP_PORT}/v1/drugs?page=1&page_size=5"
 echo "  http://127.0.0.1:${ADMIN_PORT}/v1/admin/token"
-if [ "$CMS_ENABLED" = "true" ]; then
+if [ "$CMS_STARTED" = "true" ]; then
     echo "  http://${CMS_HOST}:${CMS_PORT}/"
 fi
 if [ "$PUBLISH" = "true" ]; then
