@@ -101,7 +101,9 @@ class ExposedDiseaseRepository(
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 val referencingDrug = DrugsTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DrugsTable.data].relatedDiseaseIds }
+                    .where { DrugsTable.data.jsonbArrayContains(RELATED_DISEASE_IDS_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDrug != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(
@@ -111,7 +113,9 @@ class ExposedDiseaseRepository(
                 }
                 val referencingDisease = DiseasesTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DiseasesTable.data].relatedDiseaseIds }
+                    .where { DiseasesTable.data.jsonbArrayContains(RELATED_DISEASE_IDS_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDisease != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(
@@ -132,7 +136,9 @@ class ExposedDiseaseRepository(
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 val referencingDrug = DrugsTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DrugsTable.data].relatedDiseaseIds }
+                    .where { DrugsTable.data.jsonbArrayContains(RELATED_DISEASE_IDS_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDrug != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(
@@ -142,7 +148,9 @@ class ExposedDiseaseRepository(
                 }
                 val referencingDisease = DiseasesTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DiseasesTable.data].relatedDiseaseIds }
+                    .where { DiseasesTable.data.jsonbArrayContains(RELATED_DISEASE_IDS_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDisease != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(

@@ -99,7 +99,9 @@ class ExposedDrugRepository(
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 val referencingDisease = DiseasesTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DiseasesTable.data].relatedDrugIds }
+                    .where { DiseasesTable.data.jsonbArrayContains(RELATED_DRUG_IDS_JSON_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDisease != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(
@@ -120,7 +122,9 @@ class ExposedDrugRepository(
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                 val referencingDisease = DiseasesTable
                     .selectAll()
-                    .firstOrNull { row -> publicId in row[DiseasesTable.data].relatedDrugIds }
+                    .where { DiseasesTable.data.jsonbArrayContains(RELATED_DRUG_IDS_JSON_FIELD, publicId) }
+                    .limit(1)
+                    .singleOrNull()
                 if (referencingDisease != null) {
                     return@dbQuery AppResult.Failure(
                         DomainError.Conflict(
@@ -230,6 +234,7 @@ class ExposedDrugRepository(
     private companion object {
         const val DRUG_ID_PREFIX = "drug_"
         const val RELATED_DISEASE_IDS_FIELD = "related_disease_ids"
+        const val RELATED_DRUG_IDS_JSON_FIELD = "related_drug_ids"
         const val PUBLIC_ID_CREATE_MAX_ATTEMPTS = 8
         val DISEASE_ID_PATTERN = Regex("""disease\_\d{4}""")
     }
