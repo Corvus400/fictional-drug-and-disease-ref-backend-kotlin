@@ -1,6 +1,7 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.drug
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ApiTag
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.etagFor
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.respondProblem
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.respondResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.toProblem
@@ -16,7 +17,9 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enum
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.DrugListQueryService
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.query.SearchDefaults
 import io.github.smiley4.ktoropenapi.get
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 
 fun Route.drugRoutes(
@@ -128,6 +131,12 @@ fun Route.drugRoutes(
             }
         }
     }) {
-        call.respondResult(repository.findByPublicId(checkNotNull(call.parameters["id"])))
+        when (val result = repository.findWithMetaByPublicId(checkNotNull(call.parameters["id"]))) {
+            is AppResult.Failure -> call.respondProblem(result.error.toProblem(call))
+            is AppResult.Success -> {
+                call.response.headers.append(HttpHeaders.ETag, etagFor(result.value.updatedAt))
+                call.respond(HttpStatusCode.OK, result.value.entity)
+            }
+        }
     }
 }

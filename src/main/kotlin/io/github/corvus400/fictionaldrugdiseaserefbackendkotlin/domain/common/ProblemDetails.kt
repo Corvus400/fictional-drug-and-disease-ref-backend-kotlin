@@ -23,7 +23,7 @@ data class ProblemDetails(
     val errors: List<FieldViolation>? = null,
 )
 
-/** type URI の SSOT。category は DomainError 6 種に対応。 */
+/** type URI の SSOT。category は DomainError variants に対応。 */
 object ProblemTypes {
     const val ABOUT_BLANK: String = "about:blank"
     private const val BASE: String =
@@ -31,6 +31,7 @@ object ProblemTypes {
     const val NOT_FOUND: String = "$BASE/not-found"
     const val VALIDATION: String = "$BASE/validation"
     const val CONFLICT: String = "$BASE/conflict"
+    const val PRECONDITION_FAILED: String = "$BASE/precondition-failed"
     const val UNAUTHORIZED: String = "$BASE/unauthorized"
     const val FORBIDDEN: String = "$BASE/forbidden"
     const val RATE_LIMITED: String = "$BASE/rate-limited"

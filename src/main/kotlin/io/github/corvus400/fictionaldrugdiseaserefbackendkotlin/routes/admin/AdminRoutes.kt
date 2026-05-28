@@ -1,6 +1,7 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.admin
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.AppJson
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.parseEtag
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.respondResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DiseaseRepository
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DrugRepository
@@ -9,6 +10,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -22,6 +24,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
+import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -90,6 +93,10 @@ fun Route.adminRoutes(
     }
     put("/diseases/{id}") {
         val id = checkNotNull(call.parameters["id"])
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@put call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
         when (val current = diseaseRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
@@ -98,13 +105,13 @@ fun Route.adminRoutes(
                     is AppResult.Success -> {
                         val disease = request.value.toDisease(
                             id = id,
-                            revisedAt = current.value.revisedAt,
+                            revisedAt = currentRevisionDate(),
                         )
                         call.respondResult(
                             disease.validateReferences(
                                 drugRepository = drugRepository,
                                 diseaseRepository = diseaseRepository,
-                            ).thenUpdateWith(diseaseRepository),
+                            ).thenUpdateWith(diseaseRepository, expectedUpdatedAt),
                         )
                     }
                 }
@@ -113,20 +120,28 @@ fun Route.adminRoutes(
     }
     patch("/diseases/{id}") {
         val id = checkNotNull(call.parameters["id"])
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@patch call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
         when (val current = diseaseRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
                 val patch = AppJson.parseToJsonElement(call.receiveText()).jsonObject.withoutServerManagedFields()
                 val currentJson = AppJson.parseToJsonElement(AppJson.encodeToString(current.value)).jsonObject
                 val patchedJson = mergePatch(currentJson, patch)
-                when (val patched = decodeAdminContent<Disease>(patchedJson).mapSuccess { it.copy(id = id) }) {
+                when (
+                    val patched = decodeAdminContent<Disease>(patchedJson).mapSuccess {
+                        it.copy(id = id, revisedAt = currentRevisionDate())
+                    }
+                ) {
                     is AppResult.Failure -> call.respondResult(patched)
                     is AppResult.Success -> {
                         call.respondResult(
                             patched.value.validateReferences(
                                 drugRepository = drugRepository,
                                 diseaseRepository = diseaseRepository,
-                            ).thenUpdateWith(diseaseRepository),
+                            ).thenUpdateWith(diseaseRepository, expectedUpdatedAt),
                         )
                     }
                 }
@@ -135,6 +150,10 @@ fun Route.adminRoutes(
     }
     put("/drugs/{id}") {
         val id = checkNotNull(call.parameters["id"])
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@put call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
         when (val current = drugRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
@@ -143,9 +162,11 @@ fun Route.adminRoutes(
                     is AppResult.Success -> {
                         val drug = request.value.toDrug(
                             id = id,
-                            revisedAt = current.value.revisedAt,
+                            revisedAt = currentRevisionDate(),
                         )
-                        call.respondResult(drug.validateReferences(diseaseRepository).thenUpdateWith(drugRepository))
+                        call.respondResult(
+                            drug.validateReferences(diseaseRepository).thenUpdateWith(drugRepository, expectedUpdatedAt)
+                        )
                     }
                 }
             }
@@ -153,17 +174,26 @@ fun Route.adminRoutes(
     }
     patch("/drugs/{id}") {
         val id = checkNotNull(call.parameters["id"])
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@patch call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
         when (val current = drugRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
                 val patch = AppJson.parseToJsonElement(call.receiveText()).jsonObject.withoutServerManagedFields()
                 val currentJson = AppJson.parseToJsonElement(AppJson.encodeToString(current.value)).jsonObject
                 val patchedJson = mergePatch(currentJson, patch)
-                when (val patched = decodeAdminContent<Drug>(patchedJson).mapSuccess { it.copy(id = id) }) {
+                when (
+                    val patched = decodeAdminContent<Drug>(patchedJson).mapSuccess {
+                        it.copy(id = id, revisedAt = currentRevisionDate())
+                    }
+                ) {
                     is AppResult.Failure -> call.respondResult(patched)
                     is AppResult.Success -> {
                         call.respondResult(
-                            patched.value.validateReferences(diseaseRepository).thenUpdateWith(drugRepository)
+                            patched.value.validateReferences(diseaseRepository)
+                                .thenUpdateWith(drugRepository, expectedUpdatedAt)
                         )
                     }
                 }
@@ -172,14 +202,22 @@ fun Route.adminRoutes(
     }
     delete("/drugs/{id}") {
         val id = checkNotNull(call.parameters["id"])
-        when (val result = drugRepository.delete(id)) {
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@delete call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
+        when (val result = drugRepository.delete(id, expectedUpdatedAt)) {
             is AppResult.Failure -> call.respondResult(result)
             is AppResult.Success -> call.respond(HttpStatusCode.NoContent)
         }
     }
     delete("/diseases/{id}") {
         val id = checkNotNull(call.parameters["id"])
-        when (val result = diseaseRepository.delete(id)) {
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@delete call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
+        when (val result = diseaseRepository.delete(id, expectedUpdatedAt)) {
             is AppResult.Failure -> call.respondResult(result)
             is AppResult.Success -> call.respond(HttpStatusCode.NoContent)
         }
@@ -226,6 +264,16 @@ private suspend inline fun <reified T : Any> ApplicationCall.receiveAdminContent
                 )
             },
         )
+
+private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
+    val raw = request.headers[HttpHeaders.IfMatch]
+        ?: return AppResult.Failure(DomainError.PreconditionFailed("If-Match header is required."))
+    val parsed = parseEtag(raw)
+        ?: return AppResult.Failure(DomainError.PreconditionFailed("If-Match header is invalid."))
+    return AppResult.Success(parsed)
+}
+
+private fun currentRevisionDate(): String = LocalDate.now().toString()
 
 private inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
     runCatching { AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject)) }
@@ -337,6 +385,15 @@ private suspend fun AppResult<Drug>.thenUpdateWith(repository: DrugRepository): 
         is AppResult.Success -> repository.update(value)
     }
 
+private suspend fun AppResult<Drug>.thenUpdateWith(
+    repository: DrugRepository,
+    expectedUpdatedAt: LocalDateTime,
+): AppResult<Drug> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.update(value, expectedUpdatedAt)
+    }
+
 private suspend fun AppResult<Disease>.thenCreateWith(repository: DiseaseRepository): AppResult<Disease> =
     when (this) {
         is AppResult.Failure -> this
@@ -347,4 +404,13 @@ private suspend fun AppResult<Disease>.thenUpdateWith(repository: DiseaseReposit
     when (this) {
         is AppResult.Failure -> this
         is AppResult.Success -> repository.update(value)
+    }
+
+private suspend fun AppResult<Disease>.thenUpdateWith(
+    repository: DiseaseRepository,
+    expectedUpdatedAt: LocalDateTime,
+): AppResult<Disease> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.update(value, expectedUpdatedAt)
     }

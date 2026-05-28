@@ -17,14 +17,18 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.Postgres
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.support.PostgresTestSupport.withPostgresConfig
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -32,6 +36,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -110,12 +115,13 @@ class AdminCrudRoutesTest {
 
             val response = client.put("/v1/admin/drugs/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
                 contentType(ContentType.Application.Json)
                 setBody(contentOnlyBody(replacement.copy(id = "client_supplied_id_is_ignored")))
             }
             assertEquals(HttpStatusCode.OK, response.status)
             val updated = AppJson.decodeFromString<Drug>(response.bodyAsText())
-            assertEquals(replacement, updated)
+            assertEquals(replacement.copy(revisedAt = LocalDate.now().toString()), updated)
         } finally {
             dbQuery(
                 database = PostgresTestSupport.database,
@@ -153,6 +159,7 @@ class AdminCrudRoutesTest {
         try {
             val response = client.patch("/v1/admin/drugs/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
                 contentType(ContentType("application", "merge-patch+json"))
                 setBody("""{"generic_name":"管理APIパッチ後一般名","id":"client_supplied_id_is_ignored"}""")
             }
@@ -198,6 +205,7 @@ class AdminCrudRoutesTest {
         try {
             val response = client.delete("/v1/admin/drugs/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
             assertIs<AppResult.Failure>(runBlocking { repository.findByPublicId(created.id) })
@@ -282,12 +290,13 @@ class AdminCrudRoutesTest {
 
             val response = client.put("/v1/admin/diseases/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDisease(created.id))
                 contentType(ContentType.Application.Json)
                 setBody(contentOnlyBody(replacement.copy(id = "client_supplied_id_is_ignored")))
             }
             assertEquals(HttpStatusCode.OK, response.status)
             val updated = AppJson.decodeFromString<Disease>(response.bodyAsText())
-            assertEquals(replacement, updated)
+            assertEquals(replacement.copy(revisedAt = LocalDate.now().toString()), updated)
         } finally {
             dbQuery(
                 database = PostgresTestSupport.database,
@@ -325,6 +334,7 @@ class AdminCrudRoutesTest {
         try {
             val response = client.patch("/v1/admin/diseases/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDisease(created.id))
                 contentType(ContentType("application", "merge-patch+json"))
                 setBody("""{"name":"管理APIパッチ後疾患","id":"client_supplied_id_is_ignored"}""")
             }
@@ -370,6 +380,7 @@ class AdminCrudRoutesTest {
         try {
             val response = client.delete("/v1/admin/diseases/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDisease(created.id))
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
             assertIs<AppResult.Failure>(runBlocking { repository.findByPublicId(created.id) })
@@ -449,6 +460,7 @@ class AdminCrudRoutesTest {
         try {
             val response = client.put("/v1/admin/diseases/${created.id}") {
                 bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDisease(created.id))
                 contentType(ContentType.Application.Json)
                 setBody(contentOnlyBody(created.copy(relatedDiseaseIds = listOf(created.id))))
             }
@@ -466,6 +478,116 @@ class AdminCrudRoutesTest {
         }
     }
 
+    @Test
+    fun `GET public drug detail exposes an etag for admin concurrency control`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+
+        val response = client.get("/v1/drugs/drug_0001")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.headers[HttpHeaders.ETag]?.isNotBlank() == true)
+    }
+
+    @Test
+    fun `PUT admin drugs rejects missing if match`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API If-Match 検証一般名",
+                        brandName = "管理API If-Match 検証ブランド名",
+                        brandNameKana = "カンリアイピーアイイフマッチケンショウブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val response = client.put("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(genericName = "管理API If-Match 欠落")))
+            }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, response.status)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DrugsTable.deleteWhere { DrugsTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
+    fun `PUT admin drugs updates etag and rejects stale if match`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API stale ETag 検証一般名",
+                        brandName = "管理API stale ETag 検証ブランド名",
+                        brandNameKana = "カンリアイピーアイステイルイータグケンショウブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val staleEtag = etagForDrug(created.id)
+            val updateResponse = client.put("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(genericName = "管理API stale ETag 更新済み")))
+            }
+            assertEquals(HttpStatusCode.OK, updateResponse.status)
+
+            val currentEtag = etagForDrug(created.id)
+            assertTrue(currentEtag != staleEtag)
+
+            val staleResponse = client.put("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(genericName = "管理API stale ETag 拒否")))
+            }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, staleResponse.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(staleResponse.bodyAsText())
+            assertEquals(HttpStatusCode.PreconditionFailed.value, problem.status)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DrugsTable.deleteWhere { DrugsTable.publicId eq created.id }
+            }
+        }
+    }
+
     private fun mintToken(
         secret: String = "test-secret-please-change",
         scope: String,
@@ -477,6 +599,12 @@ class AdminCrudRoutesTest {
             .withSubject(sub)
             .withClaim("scope", scope)
             .sign(Algorithm.HMAC256(secret))
+
+    private suspend fun ApplicationTestBuilder.etagForDrug(id: String): String =
+        checkNotNull(client.get("/v1/drugs/$id").headers[HttpHeaders.ETag])
+
+    private suspend fun ApplicationTestBuilder.etagForDisease(id: String): String =
+        checkNotNull(client.get("/v1/diseases/$id").headers[HttpHeaders.ETag])
 
     private fun contentOnlyBody(drug: Drug): String =
         AppJson.encodeToString(
