@@ -11,6 +11,7 @@ import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.datetime.CurrentDateTime
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -22,16 +23,25 @@ class ExposedDrugRepository(
     private val databaseDispatcher: CoroutineDispatcher,
 ) : DrugRepository {
     override suspend fun create(drug: Drug): AppResult<Drug> =
-        queryUnexpectedAsFailure {
-            dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
-                val publicId = nextDrugPublicId()
-                val created = drug.copy(id = publicId)
-                DrugsTable.insert {
-                    it[DrugsTable.publicId] = publicId
-                    it[data] = created
+        run {
+            repeat(PUBLIC_ID_CREATE_MAX_ATTEMPTS) {
+                try {
+                    return dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                        val publicId = nextDrugPublicId()
+                        val created = drug.copy(id = publicId)
+                        DrugsTable.insert {
+                            it[DrugsTable.publicId] = publicId
+                            it[data] = created
+                        }
+                        AppResult.Success(created)
+                    }
+                } catch (e: ExposedSQLException) {
+                    if (!e.isUniqueViolation()) {
+                        return AppResult.Failure(DomainError.Unexpected(e))
+                    }
                 }
-                AppResult.Success(created)
             }
+            AppResult.Failure(DomainError.Unexpected(IllegalStateException("Failed to allocate unique drug id.")))
         }
 
     override suspend fun update(drug: Drug): AppResult<Drug> =
@@ -176,5 +186,8 @@ class ExposedDrugRepository(
 
     private companion object {
         const val DRUG_ID_PREFIX = "drug_"
+        const val PUBLIC_ID_CREATE_MAX_ATTEMPTS = 8
     }
 }
+
+private fun ExposedSQLException.isUniqueViolation(): Boolean = sqlState == "23505"

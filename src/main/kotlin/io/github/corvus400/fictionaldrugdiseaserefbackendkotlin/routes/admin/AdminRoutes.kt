@@ -11,6 +11,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.buildDrugImageUrl
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -32,6 +33,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import java.nio.file.Files
 import java.time.LocalDate
 
 @Serializable
@@ -40,6 +42,7 @@ data class WhoAmIResponse(
     val scopes: List<String>,
 )
 
+@Suppress("CyclomaticComplexMethod")
 fun Route.adminRoutes(
     drugRepository: DrugRepository,
     diseaseRepository: DiseaseRepository,
@@ -94,7 +97,10 @@ fun Route.adminRoutes(
         }
     }
     put("/diseases/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDiseaseId()) {
+            is AppResult.Failure -> return@put call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@put call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -121,7 +127,10 @@ fun Route.adminRoutes(
         }
     }
     patch("/diseases/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDiseaseId()) {
+            is AppResult.Failure -> return@patch call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@patch call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -151,7 +160,10 @@ fun Route.adminRoutes(
         }
     }
     put("/drugs/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDrugId()) {
+            is AppResult.Failure -> return@put call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@put call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -165,6 +177,7 @@ fun Route.adminRoutes(
                         val drug = request.value.toDrug(
                             id = id,
                             revisedAt = currentRevisionDate(),
+                            hasUploadedDrugImage = hasUploadedDrugImage(id, imageStorageConfig),
                         )
                         call.respondResult(
                             drug.validateReferences(diseaseRepository).thenUpdateWith(drugRepository, expectedUpdatedAt)
@@ -175,7 +188,10 @@ fun Route.adminRoutes(
         }
     }
     patch("/drugs/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDrugId()) {
+            is AppResult.Failure -> return@patch call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@patch call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -188,7 +204,15 @@ fun Route.adminRoutes(
                 val patchedJson = mergePatch(currentJson, patch)
                 when (
                     val patched = decodeAdminContent<Drug>(patchedJson).mapSuccess {
-                        it.copy(id = id, revisedAt = currentRevisionDate())
+                        it.copy(
+                            id = id,
+                            revisedAt = currentRevisionDate(),
+                            imageUrl = buildDrugImageUrl(
+                                drugId = id,
+                                dosageForm = it.dosageForm,
+                                hasUploadedDrugImage = hasUploadedDrugImage(id, imageStorageConfig),
+                            ),
+                        )
                     }
                 ) {
                     is AppResult.Failure -> call.respondResult(patched)
@@ -203,7 +227,10 @@ fun Route.adminRoutes(
         }
     }
     post("/drugs/{id}/image") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDrugId()) {
+            is AppResult.Failure -> return@post call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@post call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -215,8 +242,14 @@ fun Route.adminRoutes(
                     is AppResult.Failure -> call.respondResult(imageBytes)
                     is AppResult.Success -> {
                         val imagePath = imageStorageConfig.uploadDir.resolve("$id.png").normalize()
-                        when (val writeResult = writeUploadedImage(imagePath, imageBytes.value)) {
-                            is AppResult.Failure -> call.respondResult(writeResult)
+                        when (
+                            val tempImage = writeTempUploadedImage(
+                                uploadDir = imageStorageConfig.uploadDir,
+                                drugId = id,
+                                bytes = imageBytes.value,
+                            )
+                        ) {
+                            is AppResult.Failure -> call.respondResult(tempImage)
                             is AppResult.Success -> {
                                 val updatedDrug = current.value.copy(
                                     revisedAt = currentRevisionDate(),
@@ -224,10 +257,15 @@ fun Route.adminRoutes(
                                 )
                                 when (val update = drugRepository.update(updatedDrug, expectedUpdatedAt)) {
                                     is AppResult.Failure -> {
-                                        deleteUploadedImage(imagePath)
+                                        deleteUploadedImage(tempImage.value)
                                         call.respondResult(update)
                                     }
-                                    is AppResult.Success -> call.respondResult(update)
+                                    is AppResult.Success -> {
+                                        when (val promote = promoteUploadedImage(tempImage.value, imagePath)) {
+                                            is AppResult.Failure -> call.respondResult(promote)
+                                            is AppResult.Success -> call.respondResult(update)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -237,7 +275,10 @@ fun Route.adminRoutes(
         }
     }
     delete("/drugs/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDrugId()) {
+            is AppResult.Failure -> return@delete call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@delete call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -253,7 +294,10 @@ fun Route.adminRoutes(
         }
     }
     delete("/diseases/{id}") {
-        val id = checkNotNull(call.parameters["id"])
+        val id = when (val parsedId = call.requireDiseaseId()) {
+            is AppResult.Failure -> return@delete call.respondResult(parsedId)
+            is AppResult.Success -> parsedId.value
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@delete call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -314,7 +358,34 @@ private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
     return AppResult.Success(parsed)
 }
 
+private fun ApplicationCall.requireDrugId(): AppResult<String> =
+    requirePathId(expectedPrefix = "drug")
+
+private fun ApplicationCall.requireDiseaseId(): AppResult<String> =
+    requirePathId(expectedPrefix = "disease")
+
+private fun ApplicationCall.requirePathId(expectedPrefix: String): AppResult<String> {
+    val id = parameters["id"]
+        ?: return AppResult.Failure(
+            DomainError.Validation(listOf(FieldViolation(field = "id", reason = "Path id is required."))),
+        )
+    val pattern = Regex("""$expectedPrefix\_\d{4}""")
+    return if (pattern.matches(id)) {
+        AppResult.Success(id)
+    } else {
+        AppResult.Failure(
+            DomainError.Validation(listOf(FieldViolation(field = "id", reason = "Invalid $expectedPrefix id: $id"))),
+        )
+    }
+}
+
 private fun currentRevisionDate(): String = LocalDate.now().toString()
+
+private fun hasUploadedDrugImage(
+    id: String,
+    imageStorageConfig: ImageStorageConfig,
+): Boolean =
+    Files.isRegularFile(imageStorageConfig.uploadDir.resolve("$id.png").normalize())
 
 private inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
     runCatching { AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject)) }

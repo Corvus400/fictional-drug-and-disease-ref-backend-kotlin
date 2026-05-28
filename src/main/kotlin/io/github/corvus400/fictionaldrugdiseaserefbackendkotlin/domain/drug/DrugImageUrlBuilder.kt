@@ -5,8 +5,9 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enum
 fun buildDrugImageUrl(
     drugId: String,
     dosageForm: DosageForm,
+    hasUploadedDrugImage: Boolean = false,
 ): String =
-    if (hasBundledDrugImage(drugId)) {
+    if (hasUploadedDrugImage || hasBundledDrugImage(drugId)) {
         "/v1/images/drugs/$drugId?size=Original"
     } else {
         "/v1/images/dosage-forms/${dosageForm.serialName}?size=Original"

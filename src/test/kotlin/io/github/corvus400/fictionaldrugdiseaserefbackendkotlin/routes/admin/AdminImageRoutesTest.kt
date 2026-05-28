@@ -19,6 +19,7 @@ import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
@@ -29,7 +30,12 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import java.nio.file.Files
@@ -239,6 +245,164 @@ class AdminImageRoutesTest {
         }
     }
 
+    @Test
+    fun `POST admin drug image with stale etag preserves existing uploaded image`() = testApplication {
+        val uploadDir = Files.createTempDirectory("drug-image-stale-etag-test")
+        withPostgresConfig(imageUploadDir = uploadDir.toString())
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API画像競合一般名",
+                        brandName = "管理API画像競合ブランド名",
+                        brandNameKana = "カンリアイピーアイガゾウキョウゴウブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val staleEtag = etagForDrug(created.id)
+            val uploadResponse = client.post("/v1/admin/drugs/${created.id}/image") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                setBody(pngMultipartBody())
+            }
+            assertEquals(HttpStatusCode.OK, uploadResponse.status)
+            val imagePath = uploadDir.resolve("${created.id}.png")
+            val originalBytes = Files.readAllBytes(imagePath)
+
+            val staleResponse = client.post("/v1/admin/drugs/${created.id}/image") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                setBody(pngMultipartBody())
+            }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, staleResponse.status)
+            assertTrue(Files.isRegularFile(imagePath))
+            assertEquals(originalBytes.toList(), Files.readAllBytes(imagePath).toList())
+        } finally {
+            cleanupDrug(created.id, uploadDir)
+        }
+    }
+
+    @Test
+    fun `PUT admin drug with uploaded image keeps drug image url`() = testApplication {
+        val uploadDir = Files.createTempDirectory("drug-image-put-test")
+        withPostgresConfig(imageUploadDir = uploadDir.toString())
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API画像URL一般名",
+                        brandName = "管理API画像URLブランド名",
+                        brandNameKana = "カンリアイピーアイガゾウユーアールエルブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val uploadResponse = client.post("/v1/admin/drugs/${created.id}/image") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
+                setBody(pngMultipartBody())
+            }
+            assertEquals(HttpStatusCode.OK, uploadResponse.status)
+
+            val response = client.put("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    contentOnlyBody(
+                        created.copy(
+                            genericName = "管理API画像URL更新後一般名",
+                            revisedAt = LocalDate.now().toString(),
+                        ),
+                    ),
+                )
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val updated = AppJson.decodeFromString<Drug>(response.bodyAsText())
+            assertEquals("/v1/images/drugs/${created.id}?size=Original", updated.imageUrl)
+        } finally {
+            cleanupDrug(created.id, uploadDir)
+        }
+    }
+
+    @Test
+    fun `POST admin drug image rejects malformed path id before file write`() = testApplication {
+        val uploadDir = Files.createTempDirectory("drug-image-id-validation-test")
+        withPostgresConfig(imageUploadDir = uploadDir.toString())
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+
+        val response = client.post("/v1/admin/drugs/not_a_drug_id/image") {
+            bearerAuth(mintToken(scope = "admin"))
+            header(HttpHeaders.IfMatch, "\"2024-01-01T00:00:00\"")
+            setBody(pngMultipartBody())
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+        assertEquals("id", problem.errors?.single()?.field)
+        assertTrue(Files.notExists(uploadDir.resolve("not_a_drug_id.png")))
+        Files.deleteIfExists(uploadDir)
+    }
+
+    @Test
+    fun `repository create retries public id collisions under concurrent drug creates`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+
+        val created = runBlocking {
+            (1..8).map { index ->
+                async {
+                    repository.create(
+                        source.copy(
+                            id = "",
+                            genericName = "管理API並行作成一般名$index",
+                            brandName = "管理API並行作成ブランド名$index",
+                            brandNameKana = "カンリアイピーアイヘイコウサクセイブランドメイ$index",
+                            relatedDiseaseIds = emptyList(),
+                        ),
+                    )
+                }
+            }.awaitAll().map { result -> assertIs<AppResult.Success<Drug>>(result).value }
+        }
+        try {
+            assertEquals(created.size, created.map { it.id }.toSet().size)
+        } finally {
+            cleanupDrugs(created.map { it.id })
+        }
+    }
+
     private suspend fun ApplicationTestBuilder.etagForDrug(id: String): String =
         checkNotNull(client.get("/v1/drugs/$id").headers[HttpHeaders.ETag])
 
@@ -274,6 +438,16 @@ class AdminImageRoutesTest {
         checkNotNull(Thread.currentThread().contextClassLoader.getResourceAsStream("images/dosage_form/tablet.png"))
             .use { it.readBytes() }
 
+    private fun contentOnlyBody(drug: Drug): String =
+        AppJson.encodeToString(
+            AppJson.parseToJsonElement(AppJson.encodeToString(drug))
+                .jsonObject
+                .withoutServerManagedFields(),
+        )
+
+    private fun JsonObject.withoutServerManagedFields(): JsonObject =
+        JsonObject(filterKeys { key -> key !in serverManagedJsonFields })
+
     private fun mintToken(
         secret: String = "test-secret-please-change",
         scope: String,
@@ -300,5 +474,29 @@ class AdminImageRoutesTest {
         }
         Files.deleteIfExists(uploadDir.resolve("$id.png"))
         Files.deleteIfExists(uploadDir)
+    }
+
+    private fun cleanupDrugs(ids: List<String>) {
+        runBlocking {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                ids.forEach { id ->
+                    DrugsTable.deleteWhere { DrugsTable.publicId eq id }
+                }
+            }
+        }
+    }
+
+    private companion object {
+        val serverManagedJsonFields = setOf(
+            "id",
+            "revised_at",
+            "image_url",
+            "disclaimer",
+            "created_at",
+            "updated_at",
+        )
     }
 }
