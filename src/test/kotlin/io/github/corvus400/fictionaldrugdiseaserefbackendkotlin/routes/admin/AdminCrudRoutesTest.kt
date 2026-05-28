@@ -505,7 +505,34 @@ class AdminCrudRoutesTest {
 
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
-        assertEquals("body", problem.errors?.single()?.field)
+        assertEquals("generic_name", problem.errors?.single()?.field)
+    }
+
+    @Test
+    fun `POST admin drugs returns validation problem for invalid enum field`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+
+        val response = client.post("/v1/admin/drugs") {
+            bearerAuth(mintToken(scope = "admin"))
+            contentType(ContentType.Application.Json)
+            setBody(
+                contentOnlyBody(source).replace(Regex(""""dosage_form":"[^"]+"""")) {
+                    """"dosage_form":"not_a_form""""
+                }
+            )
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+        assertEquals("dosage_form", problem.errors?.single()?.field)
     }
 
     @Test

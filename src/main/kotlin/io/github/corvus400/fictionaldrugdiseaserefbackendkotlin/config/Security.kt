@@ -90,6 +90,7 @@ fun Route.installCors(
         (allowedMethods + Options).distinct().forEach(::allowMethod)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.IfMatch)
         exposedHeaders.forEach(::exposeHeader)
     }
 }

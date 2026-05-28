@@ -147,6 +147,10 @@ class AdminPortIsolationIntegrationTest {
             assertEquals(true, allowMethods.contains("PATCH"), allowMethods)
             assertEquals(true, allowMethods.contains("DELETE"), allowMethods)
             assertEquals(true, allowMethods.contains("OPTIONS"), allowMethods)
+            val allowHeaders = response.headers().firstValue("access-control-allow-headers").get().uppercase()
+            assertEquals(true, allowHeaders.contains("AUTHORIZATION"), allowHeaders)
+            assertEquals(true, allowHeaders.contains("CONTENT-TYPE"), allowHeaders)
+            assertEquals(true, allowHeaders.contains("IF-MATCH"), allowHeaders)
         } finally {
             server.stop()
         }
@@ -176,6 +180,18 @@ class AdminPortIsolationIntegrationTest {
                 request("http://127.0.0.1:$publicPort/v1/drugs/drug_0001", origin = origin),
                 HttpResponse.BodyHandlers.ofString(),
             )
+            val adminPortPreflight = httpClient.send(
+                options(
+                    url = "http://127.0.0.1:$adminPort/v1/drugs/drug_0001",
+                    origin = origin,
+                    requestedMethod = "GET",
+                ),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+            val adminPortGetResponse = httpClient.send(
+                request("http://127.0.0.1:$adminPort/v1/drugs/drug_0001", origin = origin),
+                HttpResponse.BodyHandlers.ofString(),
+            )
 
             assertEquals(200, preflight.statusCode())
             assertEquals(origin, preflight.headers().firstValue("access-control-allow-origin").get())
@@ -183,6 +199,12 @@ class AdminPortIsolationIntegrationTest {
             assertEquals(origin, getResponse.headers().firstValue("access-control-allow-origin").get())
             assertEquals(true, getResponse.headers().firstValue("etag").isPresent)
             assertEquals("ETag", getResponse.headers().firstValue("access-control-expose-headers").get())
+            assertEquals(200, adminPortPreflight.statusCode())
+            assertEquals(origin, adminPortPreflight.headers().firstValue("access-control-allow-origin").get())
+            assertEquals(200, adminPortGetResponse.statusCode())
+            assertEquals(origin, adminPortGetResponse.headers().firstValue("access-control-allow-origin").get())
+            assertEquals(true, adminPortGetResponse.headers().firstValue("etag").isPresent)
+            assertEquals("ETag", adminPortGetResponse.headers().firstValue("access-control-expose-headers").get())
         } finally {
             server.stop()
         }
@@ -346,7 +368,7 @@ class AdminPortIsolationIntegrationTest {
             .uri(URI.create(url))
             .header("Origin", origin)
             .header("Access-Control-Request-Method", requestedMethod)
-            .header("Access-Control-Request-Headers", "Authorization, Content-Type")
+            .header("Access-Control-Request-Headers", "Authorization, Content-Type, If-Match")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
             .build()
 

@@ -27,7 +27,6 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import javax.sql.DataSource
-import io.github.smiley4.ktoropenapi.route as documentedRoute
 
 private const val READINESS_DB_TIMEOUT_SECONDS = 1
 
@@ -75,7 +74,7 @@ fun Application.configureRouting() {
                 contentType = ContentType.Text.Plain,
             )
         }
-        documentedRoute("/v1/admin", { hidden = true }) {
+        route("/v1/admin") {
             install(AdminPortGate) {
                 adminPort = securityConfig.adminPort
             }

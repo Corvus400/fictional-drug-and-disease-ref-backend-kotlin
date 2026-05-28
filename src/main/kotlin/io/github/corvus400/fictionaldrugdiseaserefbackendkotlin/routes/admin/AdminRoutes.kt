@@ -19,7 +19,6 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.contentType
-import io.ktor.server.request.receive
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -30,10 +29,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import java.nio.file.Files
 import java.time.LocalDate
@@ -315,37 +311,6 @@ fun Route.adminRoutes(
     }
 }
 
-private val serverManagedJsonFields = setOf(
-    "id",
-    "revised_at",
-    "image_url",
-    "disclaimer",
-    "created_at",
-    "updated_at",
-)
-
-private fun JsonObject.withoutServerManagedFields(): JsonObject =
-    JsonObject(filterKeys { key -> key !in serverManagedJsonFields })
-
-private fun mergePatch(
-    current: JsonObject,
-    patch: JsonObject,
-): JsonObject {
-    val merged = current.toMutableMap()
-    patch.forEach { (key, value) ->
-        when {
-            value is JsonNull -> merged.remove(key)
-            value is JsonObject && merged[key] is JsonObject -> merged[key] =
-                mergePatch(merged.getValue(key).jsonObject, value)
-            else -> merged[key] = value
-        }
-    }
-    return JsonObject(merged)
-}
-
-private suspend inline fun <reified T : Any> ApplicationCall.receiveAdminContent(): AppResult<T> =
-    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") { receive<T>() }
-
 private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
     val raw = request.headers[HttpHeaders.IfMatch]
         ?: return AppResult.Failure(DomainError.PreconditionFailed("If-Match header is required."))
@@ -394,14 +359,3 @@ private fun hasUploadedDrugImage(
     imageStorageConfig: ImageStorageConfig,
 ): Boolean =
     Files.isRegularFile(imageStorageConfig.uploadDir.resolve("$id.png").normalize())
-
-private suspend inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
-    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") {
-        AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject))
-    }
-
-private inline fun <T : Any, R : Any> AppResult<T>.mapSuccess(transform: (T) -> R): AppResult<R> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> AppResult.Success(transform(value))
-    }

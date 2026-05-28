@@ -16,6 +16,8 @@ fun Application.configureOpenAPI() {
     val json = AppJson
 
     install(OpenApi) {
+        pathFilter = { _, url -> url.take(2) != listOf("v1", "admin") }
+
         info {
             title = "架空医薬品・疾病 リファレンス Backend API"
             version = "1.0.0"
