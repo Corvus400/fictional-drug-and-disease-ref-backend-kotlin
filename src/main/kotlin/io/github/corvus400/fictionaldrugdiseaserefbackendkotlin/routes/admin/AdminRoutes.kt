@@ -10,8 +10,14 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Ap
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.enums.Chronicity
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.enums.Icd10Chapter
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.enums.MedicalDepartment
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.buildDrugImageUrl
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.DosageForm
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.RegulatoryClass
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.RouteOfAdministration
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -19,7 +25,6 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.contentType
-import io.ktor.server.request.receive
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -30,11 +35,15 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.time.LocalDate
 
@@ -344,7 +353,25 @@ private fun mergePatch(
 }
 
 private suspend inline fun <reified T : Any> ApplicationCall.receiveAdminContent(): AppResult<T> =
-    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") { receive<T>() }
+    when (val contentType = requireJsonContentType()) {
+        is AppResult.Failure -> contentType
+        is AppResult.Success -> when (
+            val jsonObject = validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") {
+                AppJson.parseToJsonElement(receiveText()).jsonObject.withoutServerManagedFields()
+            }
+        ) {
+            is AppResult.Failure -> jsonObject
+            is AppResult.Success -> when (val validation = validateAdminJsonObject<T>(jsonObject.value)) {
+                is AppResult.Failure -> validation
+                is AppResult.Success -> validationFailureAsResult(
+                    field = "body",
+                    fallbackReason = "Invalid request body"
+                ) {
+                    AppJson.decodeFromJsonElement<T>(jsonObject.value)
+                }
+            }
+        }
+    }
 
 private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
     val raw = request.headers[HttpHeaders.IfMatch]
@@ -365,6 +392,15 @@ private fun ApplicationCall.requireMergePatchContentType(): AppResult<Unit> {
         )
     }
 }
+
+private fun ApplicationCall.requireJsonContentType(): AppResult<Unit> =
+    if (request.contentType().withoutParameters() == ContentType.Application.Json) {
+        AppResult.Success(Unit)
+    } else {
+        AppResult.Failure(
+            DomainError.UnsupportedMediaType("Admin content requests must use application/json."),
+        )
+    }
 
 private fun ApplicationCall.requireDrugId(): AppResult<String> =
     requirePathId(expectedPrefix = "drug")
@@ -396,9 +432,94 @@ private fun hasUploadedDrugImage(
     Files.isRegularFile(imageStorageConfig.uploadDir.resolve("$id.png").normalize())
 
 private suspend inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
-    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") {
-        AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject))
+    when (val validation = validateAdminJsonObject<T>(jsonObject)) {
+        is AppResult.Failure -> validation
+        is AppResult.Success -> validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") {
+            AppJson.decodeFromJsonElement<T>(jsonObject)
+        }
     }
+
+private inline fun <reified T : Any> validateAdminJsonObject(jsonObject: JsonObject): AppResult<Unit> =
+    when (T::class) {
+        AdminDrugContentRequest::class -> validateAdminDrugJsonObject(jsonObject)
+        AdminDiseaseContentRequest::class -> validateAdminDiseaseJsonObject(jsonObject)
+        else -> AppResult.Success(Unit)
+    }
+
+private fun validateAdminDrugJsonObject(jsonObject: JsonObject): AppResult<Unit> =
+    firstFailure(
+        validateEnumValue(
+            jsonObject = jsonObject,
+            field = "dosage_form",
+            allowedValues = DosageForm.entries.map { it.serialName }.toSet(),
+        ),
+        validateEnumValue(
+            jsonObject = jsonObject,
+            field = "route_of_administration",
+            allowedValues = RouteOfAdministration.entries.map { it.serialName }.toSet(),
+        ),
+        validateEnumArray(
+            jsonObject = jsonObject,
+            field = "regulatory_class",
+            allowedValues = RegulatoryClass.entries.map { it.serialName }.toSet(),
+        ),
+    )
+
+private fun validateAdminDiseaseJsonObject(jsonObject: JsonObject): AppResult<Unit> =
+    firstFailure(
+        validateEnumValue(
+            jsonObject = jsonObject,
+            field = "icd10_chapter",
+            allowedValues = Icd10Chapter.entries.map { it.serialName }.toSet(),
+        ),
+        validateEnumArray(
+            jsonObject = jsonObject,
+            field = "medical_department",
+            allowedValues = MedicalDepartment.entries.map { it.serialName }.toSet(),
+        ),
+        validateEnumValue(
+            jsonObject = jsonObject,
+            field = "chronicity",
+            allowedValues = Chronicity.entries.map { it.serialName }.toSet(),
+        ),
+    )
+
+private fun firstFailure(vararg results: AppResult<Unit>): AppResult<Unit> =
+    results.firstOrNull { it is AppResult.Failure } ?: AppResult.Success(Unit)
+
+private fun validateEnumValue(
+    jsonObject: JsonObject,
+    field: String,
+    allowedValues: Set<String>,
+): AppResult<Unit> {
+    val value = jsonObject[field] ?: return AppResult.Success(Unit)
+    val raw = value.jsonStringOrNull()
+    return if (raw != null && raw in allowedValues) {
+        AppResult.Success(Unit)
+    } else {
+        invalidEnumField(field)
+    }
+}
+
+private fun validateEnumArray(
+    jsonObject: JsonObject,
+    field: String,
+    allowedValues: Set<String>,
+): AppResult<Unit> {
+    val value = jsonObject[field] ?: return AppResult.Success(Unit)
+    val items = value as? JsonArray ?: return invalidEnumField(field)
+    return if (items.all { item -> item.jsonStringOrNull() in allowedValues }) {
+        AppResult.Success(Unit)
+    } else {
+        invalidEnumField(field)
+    }
+}
+
+private fun JsonElement.jsonStringOrNull(): String? =
+    runCatching { jsonPrimitive.contentOrNull }.getOrNull()
+
+private fun invalidEnumField(field: String): AppResult.Failure =
+    AppResult.Failure(DomainError.Validation(listOf(FieldViolation(field = field, reason = "invalid"))))
 
 private inline fun <T : Any, R : Any> AppResult<T>.mapSuccess(transform: (T) -> R): AppResult<R> =
     when (this) {
