@@ -58,3 +58,4 @@ cloudflared/*.json
 cloudflared/cert.pem
 .cloudflared.pid
 .cloudflared.log
+.cms.pid

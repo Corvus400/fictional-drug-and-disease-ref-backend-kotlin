@@ -65,6 +65,7 @@ object PostgresTestSupport {
                 "security.rateLimitLimit" to rateLimitLimit.toString(),
                 "security.rateLimitRefillSeconds" to rateLimitRefillSeconds.toString(),
                 "security.corsAllowedOrigins" to "",
+                "security.adminHost" to "127.0.0.1",
                 "security.adminPort" to "80",
                 "security.adminCorsAllowedOrigins" to "",
                 "security.adminTokenTtlSeconds" to "3600",
