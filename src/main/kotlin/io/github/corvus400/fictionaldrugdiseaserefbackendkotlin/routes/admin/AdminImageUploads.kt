@@ -51,36 +51,27 @@ fun writeTempUploadedImage(
     drugId: String,
     bytes: ByteArray,
 ): AppResult<Path> =
-    runCatching {
+    unexpectedFailureAsResult {
         Files.createDirectories(uploadDir)
         val tempPath = Files.createTempFile(uploadDir, "$drugId-", ".tmp")
         Files.write(tempPath, bytes)
         tempPath
-    }.fold(
-        onSuccess = { AppResult.Success(it) },
-        onFailure = { AppResult.Failure(DomainError.Unexpected(it)) },
-    )
+    }
 
 fun promoteUploadedImage(
     tempPath: Path,
     imagePath: Path,
 ): AppResult<Unit> =
-    runCatching {
+    unexpectedFailureAsResult {
         Files.move(tempPath, imagePath, StandardCopyOption.REPLACE_EXISTING)
         Unit
-    }.fold(
-        onSuccess = { AppResult.Success(Unit) },
-        onFailure = { AppResult.Failure(DomainError.Unexpected(it)) },
-    )
+    }
 
 fun deleteUploadedImage(imagePath: Path): AppResult<Unit> =
-    runCatching {
+    unexpectedFailureAsResult {
         Files.deleteIfExists(imagePath)
         Unit
-    }.fold(
-        onSuccess = { AppResult.Success(Unit) },
-        onFailure = { AppResult.Failure(DomainError.Unexpected(it)) },
-    )
+    }
 
 private fun ByteArray.isPng(): Boolean =
     size >= PNG_SIGNATURE.size && PNG_SIGNATURE.indices.all { index -> this[index] == PNG_SIGNATURE[index] }

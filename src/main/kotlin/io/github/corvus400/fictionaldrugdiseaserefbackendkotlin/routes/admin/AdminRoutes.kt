@@ -12,11 +12,13 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Fi
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.buildDrugImageUrl
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
+import io.ktor.server.request.contentType
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
@@ -131,6 +133,10 @@ fun Route.adminRoutes(
             is AppResult.Failure -> return@patch call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
         }
+        when (val contentType = call.requireMergePatchContentType()) {
+            is AppResult.Failure -> return@patch call.respondResult(contentType)
+            is AppResult.Success -> Unit
+        }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@patch call.respondResult(ifMatch)
             is AppResult.Success -> ifMatch.value
@@ -191,6 +197,10 @@ fun Route.adminRoutes(
         val id = when (val parsedId = call.requireDrugId()) {
             is AppResult.Failure -> return@patch call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
+        }
+        when (val contentType = call.requireMergePatchContentType()) {
+            is AppResult.Failure -> return@patch call.respondResult(contentType)
+            is AppResult.Success -> Unit
         }
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
             is AppResult.Failure -> return@patch call.respondResult(ifMatch)
@@ -338,17 +348,7 @@ private fun mergePatch(
 }
 
 private suspend inline fun <reified T : Any> ApplicationCall.receiveAdminContent(): AppResult<T> =
-    runCatching { receive<T>() }
-        .fold(
-            onSuccess = { AppResult.Success(it) },
-            onFailure = { error ->
-                AppResult.Failure(
-                    DomainError.Validation(
-                        listOf(FieldViolation(field = "body", reason = error.message ?: "Invalid request body")),
-                    ),
-                )
-            },
-        )
+    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") { receive<T>() }
 
 private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
     val raw = request.headers[HttpHeaders.IfMatch]
@@ -356,6 +356,18 @@ private fun ApplicationCall.requireIfMatch(): AppResult<LocalDateTime> {
     val parsed = parseEtag(raw)
         ?: return AppResult.Failure(DomainError.PreconditionFailed("If-Match header is invalid."))
     return AppResult.Success(parsed)
+}
+
+private fun ApplicationCall.requireMergePatchContentType(): AppResult<Unit> {
+    val expected = ContentType("application", "merge-patch+json")
+    val actual = request.contentType().withoutParameters()
+    return if (actual == expected) {
+        AppResult.Success(Unit)
+    } else {
+        AppResult.Failure(
+            DomainError.UnsupportedMediaType("PATCH requests must use application/merge-patch+json."),
+        )
+    }
 }
 
 private fun ApplicationCall.requireDrugId(): AppResult<String> =
@@ -387,18 +399,10 @@ private fun hasUploadedDrugImage(
 ): Boolean =
     Files.isRegularFile(imageStorageConfig.uploadDir.resolve("$id.png").normalize())
 
-private inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
-    runCatching { AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject)) }
-        .fold(
-            onSuccess = { AppResult.Success(it) },
-            onFailure = { error ->
-                AppResult.Failure(
-                    DomainError.Validation(
-                        listOf(FieldViolation(field = "body", reason = error.message ?: "Invalid request body")),
-                    ),
-                )
-            },
-        )
+private suspend inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
+    validationFailureAsResult(field = "body", fallbackReason = "Invalid request body") {
+        AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject))
+    }
 
 private inline fun <T : Any, R : Any> AppResult<T>.mapSuccess(transform: (T) -> R): AppResult<R> =
     when (this) {
