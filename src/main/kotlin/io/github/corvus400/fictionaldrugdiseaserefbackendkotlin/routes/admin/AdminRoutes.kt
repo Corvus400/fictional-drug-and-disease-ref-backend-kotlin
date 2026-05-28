@@ -420,12 +420,6 @@ private suspend fun AppResult<Drug>.thenCreateWith(repository: DrugRepository): 
         is AppResult.Success -> repository.create(value)
     }
 
-private suspend fun AppResult<Drug>.thenUpdateWith(repository: DrugRepository): AppResult<Drug> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.update(value)
-    }
-
 private suspend fun AppResult<Drug>.thenUpdateWith(
     repository: DrugRepository,
     expectedUpdatedAt: LocalDateTime,
@@ -439,12 +433,6 @@ private suspend fun AppResult<Disease>.thenCreateWith(repository: DiseaseReposit
     when (this) {
         is AppResult.Failure -> this
         is AppResult.Success -> repository.create(value)
-    }
-
-private suspend fun AppResult<Disease>.thenUpdateWith(repository: DiseaseRepository): AppResult<Disease> =
-    when (this) {
-        is AppResult.Failure -> this
-        is AppResult.Success -> repository.update(value)
     }
 
 private suspend fun AppResult<Disease>.thenUpdateWith(
