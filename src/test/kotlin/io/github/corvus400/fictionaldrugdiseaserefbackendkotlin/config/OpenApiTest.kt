@@ -32,6 +32,7 @@ class OpenApiTest {
         assertTrue("/v1/categories" in paths)
         assertTrue("/v1/images/dosage-forms/{form}" in paths)
         assertTrue("/v1/images/drugs/{drugId}" in paths)
+        assertFalse(paths.any { it.startsWith("/v1/admin") }, paths.filter { it.startsWith("/v1/admin") }.toString())
         assertFalse(body.contains("/__admin"))
         assertFalse(body.contains("X-Mock-Scenario"))
     }

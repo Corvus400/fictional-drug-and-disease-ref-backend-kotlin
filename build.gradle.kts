@@ -130,3 +130,10 @@ tasks.register<JavaExec>("exportSeedSql") {
         layout.projectDirectory.dir("src/main/resources/db/migration").asFile.absolutePath,
     )
 }
+
+tasks.register<JavaExec>("printAdminToken") {
+    group = "security"
+    description = "Print a local admin JWT signed with JWT_SECRET."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.tools.AdminTokenPrinterKt")
+}
