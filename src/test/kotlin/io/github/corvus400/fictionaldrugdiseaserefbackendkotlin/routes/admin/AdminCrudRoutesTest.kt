@@ -179,6 +179,55 @@ class AdminCrudRoutesTest {
     }
 
     @Test
+    fun `PATCH admin drugs rejects non merge patch content type`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理APIパッチ種別検証前一般名",
+                        brandName = "管理APIパッチ種別検証前ブランド名",
+                        brandNameKana = "カンリアイピーアイパッチシュベツケンショウマエブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val response = client.patch("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDrug(created.id))
+                contentType(ContentType.Application.Json)
+                setBody("""{"generic_name":"管理APIパッチ種別検証後一般名"}""")
+            }
+
+            assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+            assertEquals(HttpStatusCode.UnsupportedMediaType.value, problem.status)
+            val found = assertIs<AppResult.Success<Drug>>(
+                runBlocking { repository.findByPublicId(created.id) },
+            ).value
+            assertEquals("管理APIパッチ種別検証前一般名", found.genericName)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DrugsTable.deleteWhere { DrugsTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
     fun `DELETE admin drugs removes a drug and returns no content`() = testApplication {
         withPostgresConfig()
         application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
@@ -343,6 +392,55 @@ class AdminCrudRoutesTest {
             assertEquals(created.id, updated.id)
             assertEquals("管理APIパッチ後疾患", updated.name)
             assertEquals(created.nameKana, updated.nameKana)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DiseasesTable.deleteWhere { DiseasesTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
+    fun `PATCH admin diseases rejects non merge patch content type`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDiseaseRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Disease>>(
+            runBlocking { repository.findByPublicId("disease_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Disease>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        name = "管理APIパッチ種別検証前疾患",
+                        nameKana = "カンリアイピーアイパッチシュベツケンショウマエシッカン",
+                        relatedDrugIds = emptyList(),
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val response = client.patch("/v1/admin/diseases/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, etagForDisease(created.id))
+                contentType(ContentType.Application.Json)
+                setBody("""{"name":"管理APIパッチ種別検証後疾患"}""")
+            }
+
+            assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+            assertEquals(HttpStatusCode.UnsupportedMediaType.value, problem.status)
+            val found = assertIs<AppResult.Success<Disease>>(
+                runBlocking { repository.findByPublicId(created.id) },
+            ).value
+            assertEquals("管理APIパッチ種別検証前疾患", found.name)
         } finally {
             dbQuery(
                 database = PostgresTestSupport.database,

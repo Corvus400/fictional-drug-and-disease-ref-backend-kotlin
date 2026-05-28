@@ -96,6 +96,13 @@ fun DomainError.toProblem(call: ApplicationCall): ProblemDetails = when (this) {
         instance = call.request.uri,
         errors = violations,
     )
+    is DomainError.UnsupportedMediaType -> ProblemDetails(
+        type = ProblemTypes.UNSUPPORTED_MEDIA_TYPE,
+        title = "Unsupported Media Type",
+        status = HttpStatusCode.UnsupportedMediaType.value,
+        detail = detail,
+        instance = call.request.uri,
+    )
     is DomainError.Conflict -> ProblemDetails(
         type = ProblemTypes.CONFLICT,
         title = "Conflict",

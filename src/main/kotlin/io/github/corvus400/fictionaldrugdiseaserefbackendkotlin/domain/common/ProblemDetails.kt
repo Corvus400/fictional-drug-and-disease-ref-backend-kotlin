@@ -30,6 +30,7 @@ object ProblemTypes {
         "https://github.com/Corvus400/fictional-drug-and-disease-ref/problems"
     const val NOT_FOUND: String = "$BASE/not-found"
     const val VALIDATION: String = "$BASE/validation"
+    const val UNSUPPORTED_MEDIA_TYPE: String = "$BASE/unsupported-media-type"
     const val CONFLICT: String = "$BASE/conflict"
     const val PRECONDITION_FAILED: String = "$BASE/precondition-failed"
     const val UNAUTHORIZED: String = "$BASE/unauthorized"
