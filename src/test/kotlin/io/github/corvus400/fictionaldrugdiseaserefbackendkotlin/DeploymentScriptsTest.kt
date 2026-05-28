@@ -103,6 +103,39 @@ class DeploymentScriptsTest {
     }
 
     @Test
+    fun `public start defaults CMS to auto mode without breaking backend startup`() {
+        val script = projectRoot.resolve("scripts/start.sh").readText()
+
+        assertTrue(
+            script.contains("CMS_ENABLED=\"auto\""),
+            "scripts/start.sh --public must try to start the CMS by default when it is available.",
+        )
+        assertTrue(
+            script.contains("WARNING: CMS auto mode skipped:"),
+            "CMS auto mode must skip missing local CMS prerequisites without failing public backend startup.",
+        )
+        assertTrue(
+            script.contains("ERROR: CMS directory is missing:"),
+            "CMS_ENABLED=true must remain strict when the caller explicitly requires CMS startup.",
+        )
+        assertTrue(
+            script.contains(
+                """
+                start_cms
+                if [ "${'$'}PUBLISH" = "true" ]; then
+                    start_tunnel
+                fi
+                """.trimIndent(),
+            ),
+            "public startup must start the local CMS before public edge readiness can fail.",
+        )
+        assertTrue(
+            script.contains("PUBLIC_READINESS_REQUIRED"),
+            "public edge readiness must be configurable so local backend and CMS startup remain usable.",
+        )
+    }
+
+    @Test
     fun `stop script stops only the recorded CMS process`() {
         val script = projectRoot.resolve("scripts/stop.sh").readText()
 

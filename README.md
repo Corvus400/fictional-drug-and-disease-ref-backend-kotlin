@@ -168,10 +168,16 @@ Daily operation:
 
 `start.sh --public` starts PostgreSQL, the Ktor app, and a background
 Cloudflare Tunnel process. It generates runtime-only database and JWT secrets
-for public mode and injects them through temporary env files. CMS is not started
-in public mode unless explicitly requested with
-`CMS_ENABLED=true ./scripts/start.sh --public`. `stop.sh` stops the tunnel, the
-recorded CMS dev server process, and the local containers.
+for public mode and injects them through temporary env files. Public mode uses
+`CMS_ENABLED=auto` by default: if the sibling CMS checkout, dependencies, `pnpm`,
+and `launchctl` are available, it also starts the CMS dev server on
+`127.0.0.1:5173`; otherwise it skips only CMS startup and keeps the public
+backend/tunnel startup path usable. Use `CMS_ENABLED=true ./scripts/start.sh --public`
+when CMS startup must be strict, or `CMS_ENABLED=false ./scripts/start.sh --public`
+to skip CMS intentionally. Public edge readiness is reported after the tunnel
+starts; set `PUBLIC_READINESS_REQUIRED=true` when a failed edge readiness check
+must fail the command. `stop.sh` stops the tunnel, the recorded CMS dev server
+process, and the local containers.
 
 The committed `cloudflared/config.yml.example` blocks `/metrics` at the
 Cloudflare ingress before forwarding other requests to `http://localhost:18080`.
