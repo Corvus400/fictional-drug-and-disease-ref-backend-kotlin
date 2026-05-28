@@ -78,14 +78,14 @@ fun Application.configureRateLimit() {
 }
 
 fun Route.installCors(
-    allowedOrigins: List<String>,
+    allowedOrigins: List<CorsOrigin>,
     allowedMethods: List<HttpMethod>,
     exposedHeaders: List<String> = emptyList(),
 ) {
     if (allowedOrigins.isEmpty()) return
     install(CORS) {
         allowedOrigins.forEach { origin ->
-            allowHost(origin.removePrefix("https://").removePrefix("http://"), schemes = listOf("https", "http"))
+            allowHost(origin.host, schemes = listOf(origin.scheme))
         }
         (allowedMethods + Options).distinct().forEach(::allowMethod)
         allowHeader(HttpHeaders.Authorization)

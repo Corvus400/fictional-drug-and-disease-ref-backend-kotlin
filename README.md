@@ -121,7 +121,9 @@ paste tokens into logs, issues, pull requests, or screenshots. For CLI use,
 
 The local startup script publishes the admin connector only on
 `127.0.0.1:19090` and injects CMS CORS origins for `127.0.0.1:5173` /
-`localhost:5173`. The token response includes both the canonical
+`localhost:5173`. It uses `ADMIN_HOST=0.0.0.0` only as a container-internal
+bind exception guarded by `ALLOW_CONTAINER_ADMIN_WILDCARD_BIND=true`; direct
+JVM startup remains loopback-only by default. The token response includes both the canonical
 `access_token` field and the CMS-compatible `token` alias.
 
 ### Local Verification
