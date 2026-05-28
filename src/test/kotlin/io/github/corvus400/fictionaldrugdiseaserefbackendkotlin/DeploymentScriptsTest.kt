@@ -77,6 +77,10 @@ class DeploymentScriptsTest {
             "scripts/start.sh must bind the admin connector inside the container so localhost publishing works.",
         )
         assertTrue(
+            script.contains("ALLOW_CONTAINER_ADMIN_WILDCARD_BIND=true"),
+            "scripts/start.sh must mark the wildcard admin bind as a container-internal exception.",
+        )
+        assertTrue(
             script.contains("export VITE_API_BASE_URL=\"http://127.0.0.1:"),
             "scripts/start.sh must inject the CMS API base URL without writing CMS .env.local.",
         )

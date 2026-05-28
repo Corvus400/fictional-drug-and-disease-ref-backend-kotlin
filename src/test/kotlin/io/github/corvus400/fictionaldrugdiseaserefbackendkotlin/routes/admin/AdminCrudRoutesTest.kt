@@ -686,6 +686,110 @@ class AdminCrudRoutesTest {
         }
     }
 
+    @Test
+    fun `DELETE admin drugs rejects stale if match`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API stale DELETE 一般名",
+                        brandName = "管理API stale DELETE ブランド名",
+                        brandNameKana = "カンリアイピーステイルデリートブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val staleEtag = etagForDrug(created.id)
+            val updateResponse = client.put("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(genericName = "管理API stale DELETE 更新済み")))
+            }
+            assertEquals(HttpStatusCode.OK, updateResponse.status)
+
+            val staleResponse = client.delete("/v1/admin/drugs/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+            }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, staleResponse.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(staleResponse.bodyAsText())
+            assertEquals(HttpStatusCode.PreconditionFailed.value, problem.status)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DrugsTable.deleteWhere { DrugsTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
+    fun `DELETE admin diseases rejects stale if match`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDiseaseRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Disease>>(
+            runBlocking { repository.findByPublicId("disease_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Disease>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        name = "管理API stale DELETE 疾患",
+                        nameKana = "カンリアイピーステイルデリートシッカン",
+                        relatedDrugIds = emptyList(),
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val staleEtag = etagForDisease(created.id)
+            val updateResponse = client.put("/v1/admin/diseases/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(name = "管理API stale DELETE 更新済み疾患")))
+            }
+            assertEquals(HttpStatusCode.OK, updateResponse.status)
+
+            val staleResponse = client.delete("/v1/admin/diseases/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, staleEtag)
+            }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, staleResponse.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(staleResponse.bodyAsText())
+            assertEquals(HttpStatusCode.PreconditionFailed.value, problem.status)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DiseasesTable.deleteWhere { DiseasesTable.publicId eq created.id }
+            }
+        }
+    }
+
     private fun mintToken(
         secret: String = "test-secret-please-change",
         scope: String,

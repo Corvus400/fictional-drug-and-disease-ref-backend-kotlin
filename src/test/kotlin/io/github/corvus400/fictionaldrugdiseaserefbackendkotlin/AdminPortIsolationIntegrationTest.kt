@@ -14,6 +14,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class AdminPortIsolationIntegrationTest {
     @Test
@@ -165,14 +166,14 @@ class AdminPortIsolationIntegrationTest {
 
             val preflight = httpClient.send(
                 options(
-                    url = "http://127.0.0.1:$publicPort/v1/drugs",
+                    url = "http://127.0.0.1:$publicPort/v1/drugs/drug_0001",
                     origin = origin,
                     requestedMethod = "GET",
                 ),
                 HttpResponse.BodyHandlers.ofString(),
             )
             val getResponse = httpClient.send(
-                request("http://127.0.0.1:$publicPort/v1/drugs", origin = origin),
+                request("http://127.0.0.1:$publicPort/v1/drugs/drug_0001", origin = origin),
                 HttpResponse.BodyHandlers.ofString(),
             )
 
@@ -180,7 +181,78 @@ class AdminPortIsolationIntegrationTest {
             assertEquals(origin, preflight.headers().firstValue("access-control-allow-origin").get())
             assertEquals(200, getResponse.statusCode())
             assertEquals(origin, getResponse.headers().firstValue("access-control-allow-origin").get())
+            assertEquals(true, getResponse.headers().firstValue("etag").isPresent)
             assertEquals("ETag", getResponse.headers().firstValue("access-control-expose-headers").get())
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `cors does not allow the same host with an unconfigured scheme`() {
+        val publicPort = freePort()
+        val adminPort = freePort()
+        val server = createConfiguredServer(
+            args = testServerArgs(
+                publicPort = publicPort,
+                adminPort = adminPort,
+                corsOrigin = "http://localhost:5173",
+            ),
+        )
+
+        try {
+            server.start(wait = false)
+
+            val response = httpClient.send(
+                request(
+                    url = "http://127.0.0.1:$publicPort/v1/drugs/drug_0001",
+                    origin = "https://localhost:5173",
+                ),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+            assertEquals(403, response.statusCode())
+            assertEquals(false, response.headers().firstValue("access-control-allow-origin").isPresent)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `admin wildcard bind requires the explicit container exception`() {
+        assertFailsWith<IllegalArgumentException> {
+            createConfiguredServer(
+                args = testServerArgs(
+                    publicPort = freePort(),
+                    adminPort = freePort(),
+                    adminHost = "0.0.0.0",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `admin wildcard bind is allowed only with the explicit container exception`() {
+        val publicPort = freePort()
+        val adminPort = freePort()
+        val server = createConfiguredServer(
+            args = testServerArgs(
+                publicPort = publicPort,
+                adminPort = adminPort,
+                adminHost = "0.0.0.0",
+                allowContainerAdminWildcardBind = true,
+            ),
+        )
+
+        try {
+            server.start(wait = false)
+
+            val response = httpClient.send(
+                request("http://127.0.0.1:$adminPort/v1/admin/whoami"),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+            assertEquals(401, response.statusCode())
         } finally {
             server.stop()
         }
@@ -218,12 +290,15 @@ class AdminPortIsolationIntegrationTest {
         publicPort: Int,
         adminPort: Int,
         corsOrigin: String = "",
+        adminHost: String = "127.0.0.1",
+        allowContainerAdminWildcardBind: Boolean = false,
     ): Array<String> = arrayOf(
         "-P:app.environment=test",
         "-P:ktor.deployment.port=$publicPort",
         "-P:ktor.deployment.host=127.0.0.1",
-        "-P:security.adminHost=127.0.0.1",
+        "-P:security.adminHost=$adminHost",
         "-P:security.adminPort=$adminPort",
+        "-P:security.allowContainerAdminWildcardBind=$allowContainerAdminWildcardBind",
         "-P:database.url=${PostgresTestSupport.databaseConfig.url}",
         "-P:database.user=${PostgresTestSupport.databaseConfig.user}",
         "-P:database.password=${PostgresTestSupport.databaseConfig.password}",

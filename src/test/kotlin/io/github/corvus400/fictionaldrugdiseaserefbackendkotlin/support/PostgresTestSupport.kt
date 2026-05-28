@@ -67,6 +67,7 @@ object PostgresTestSupport {
                 "security.corsAllowedOrigins" to "",
                 "security.adminHost" to "127.0.0.1",
                 "security.adminPort" to "80",
+                "security.allowContainerAdminWildcardBind" to "false",
                 "security.adminCorsAllowedOrigins" to "",
                 "security.adminTokenTtlSeconds" to "3600",
                 "images.uploadDir" to imageUploadDir,

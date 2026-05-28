@@ -14,6 +14,7 @@ fun main() {
         corsAllowedOrigins = emptyList(),
         adminHost = System.getenv("ADMIN_HOST") ?: "127.0.0.1",
         adminPort = (System.getenv("ADMIN_PORT") ?: "19090").toInt(),
+        allowContainerAdminWildcardBind = false,
         adminCorsAllowedOrigins = emptyList(),
         adminTokenTtlSeconds = (System.getenv("ADMIN_TOKEN_TTL_SECONDS") ?: "3600").toLong(),
     )

@@ -11,6 +11,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configure
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureSecurity
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureSerialization
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.configureStatusPages
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.validateAdminBindHost
 import io.ktor.server.application.Application
 import io.ktor.server.engine.CommandLineConfig
 import io.ktor.server.engine.EmbeddedServer
@@ -33,7 +34,15 @@ fun createConfiguredServer(
 ): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> {
     val cli = CommandLineConfig(args)
     val deploymentConfig = cli.rootConfig.environment.config.config("ktor.deployment")
-    val adminHost = cli.rootConfig.environment.config.property("security.adminHost").getString()
+    val allowContainerAdminWildcardBind = cli.rootConfig.environment.config
+        .propertyOrNull("security.allowContainerAdminWildcardBind")
+        ?.getString()
+        ?.toBooleanStrict()
+        ?: false
+    val adminHost = validateAdminBindHost(
+        adminHost = cli.rootConfig.environment.config.property("security.adminHost").getString(),
+        allowContainerAdminWildcardBind = allowContainerAdminWildcardBind,
+    )
     val adminPort = cli.rootConfig.environment.config.property("security.adminPort").getString().toInt()
     return embeddedServer(Netty, rootConfig = cli.rootConfig) {
         takeFrom(cli.engineConfig)
