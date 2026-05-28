@@ -12,6 +12,7 @@ fun main() {
         rateLimitLimit = 0,
         rateLimitRefillSeconds = 0,
         corsAllowedOrigins = emptyList(),
+        adminHost = System.getenv("ADMIN_HOST") ?: "127.0.0.1",
         adminPort = (System.getenv("ADMIN_PORT") ?: "19090").toInt(),
         adminCorsAllowedOrigins = emptyList(),
         adminTokenTtlSeconds = (System.getenv("ADMIN_TOKEN_TTL_SECONDS") ?: "3600").toLong(),

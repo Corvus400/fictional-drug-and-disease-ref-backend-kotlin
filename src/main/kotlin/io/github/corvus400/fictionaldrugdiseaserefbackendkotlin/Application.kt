@@ -33,13 +33,14 @@ fun createConfiguredServer(
 ): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> {
     val cli = CommandLineConfig(args)
     val deploymentConfig = cli.rootConfig.environment.config.config("ktor.deployment")
+    val adminHost = cli.rootConfig.environment.config.property("security.adminHost").getString()
     val adminPort = cli.rootConfig.environment.config.property("security.adminPort").getString().toInt()
     return embeddedServer(Netty, rootConfig = cli.rootConfig) {
         takeFrom(cli.engineConfig)
         loadCommonConfiguration(deploymentConfig)
         connectors.add(
             EngineConnectorBuilder().apply {
-                host = "127.0.0.1"
+                host = adminHost
                 port = adminPort
             },
         )

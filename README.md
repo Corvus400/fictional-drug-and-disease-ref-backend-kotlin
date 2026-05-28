@@ -37,10 +37,13 @@ DO NOT use for medical decisions or clinical practice.
 ./scripts/start.sh
 curl -s http://127.0.0.1:18080/health/ready
 curl -s 'http://127.0.0.1:18080/v1/drugs?page=1&page_size=5'
+# CMS: http://127.0.0.1:5173/
 ./scripts/stop.sh
 ```
 
-`./scripts/start.sh` は fresh な PostgreSQL コンテナを起動し、database readiness を待ち、application image を build し、Flyway migration 後に API を `127.0.0.1:18080` のみに公開します。
+`./scripts/start.sh` は fresh な PostgreSQL コンテナを起動し、database readiness を待ち、application image を build し、Flyway migration 後に read API を `127.0.0.1:18080`、admin API を `127.0.0.1:19090` に公開します。隣接 checkout に `fictional-drug-and-disease-ref-cms` がある場合は CMS dev server も `127.0.0.1:5173` で起動します。
+
+CMS を起動しない場合は `CMS_ENABLED=false ./scripts/start.sh` を使います。CMS checkout の場所が異なる場合は `CMS_DIR=/path/to/fictional-drug-and-disease-ref-cms ./scripts/start.sh` を指定してください。
 
 ## 動作環境
 
@@ -116,12 +119,19 @@ single-user development host, keep `JWT_SECRET` in the environment, and do not
 paste tokens into logs, issues, pull requests, or screenshots. For CLI use,
 `./gradlew printAdminToken` prints a token signed with `JWT_SECRET`.
 
+The local startup script publishes the admin connector only on
+`127.0.0.1:19090` and injects CMS CORS origins for `127.0.0.1:5173` /
+`localhost:5173`. The token response includes both the canonical
+`access_token` field and the CMS-compatible `token` alias.
+
 ### Local Verification
 
 ```bash
 ./scripts/start.sh
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health/ready
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:19090/health/ready
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5173/
 container stop fictional-drugref-backend-postgres
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health/ready
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health
@@ -156,8 +166,10 @@ Daily operation:
 
 `start.sh --public` starts PostgreSQL, the Ktor app, and a background
 Cloudflare Tunnel process. It generates runtime-only database and JWT secrets
-for public mode and injects them through temporary env files. `stop.sh` stops
-the tunnel and deletes the local containers.
+for public mode and injects them through temporary env files. CMS is not started
+in public mode unless explicitly requested with
+`CMS_ENABLED=true ./scripts/start.sh --public`. `stop.sh` stops the tunnel, the
+recorded CMS dev server process, and the local containers.
 
 The committed `cloudflared/config.yml.example` blocks `/metrics` at the
 Cloudflare ingress before forwarding other requests to `http://localhost:18080`.
@@ -207,7 +219,7 @@ Spotless は `origin/main` からの差分に ratchet します。古い base �
 - GitHub 履歴の author email は GitHub noreply に統一しています。
 - tracked tree、Git 履歴、GitHub Issue / Pull Request / コメント / Actions log に対して、秘密情報・ローカル絶対パス・個人メールの混入を確認します。
 - コンテナ image には secret を焼き込まず、runtime configuration は env から注入します。
-- ローカル起動では app port を `127.0.0.1` に bind し、PostgreSQL は host に publish しません。
+- ローカル起動では app/admin port を `127.0.0.1` に bind し、PostgreSQL は host に publish しません。
 - Cloudflare Tunnel 公開時は `/metrics` を edge で遮断し、origin direct access を開けない運用にします。
 - 公開後は GitHub secret scanning / push protection / Dependabot security updates の有効化状態を確認します。
 

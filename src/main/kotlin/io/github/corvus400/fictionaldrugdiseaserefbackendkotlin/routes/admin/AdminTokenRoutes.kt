@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AdminTokenResponse(
     val accessToken: String,
+    val token: String,
     val tokenType: String,
     val expiresInSeconds: Long,
 )
@@ -20,6 +21,7 @@ fun Route.adminTokenRoutes(securityConfig: SecurityConfig) {
         call.respond(
             AdminTokenResponse(
                 accessToken = token.accessToken,
+                token = token.accessToken,
                 tokenType = "Bearer",
                 expiresInSeconds = securityConfig.adminTokenTtlSeconds,
             ),

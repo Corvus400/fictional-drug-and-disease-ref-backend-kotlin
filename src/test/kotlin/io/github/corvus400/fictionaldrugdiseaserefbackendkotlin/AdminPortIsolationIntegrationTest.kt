@@ -109,6 +109,7 @@ class AdminPortIsolationIntegrationTest {
             val decoded = JWT.decode(token)
 
             assertEquals(200, response.statusCode())
+            assertEquals(token, body.getValue("token").jsonPrimitive.content)
             assertEquals("Bearer", body.getValue("token_type").jsonPrimitive.content)
             assertEquals("admin", decoded.getClaim("scope").asString())
             assertEquals("local-admin", decoded.subject)
@@ -221,6 +222,7 @@ class AdminPortIsolationIntegrationTest {
         "-P:app.environment=test",
         "-P:ktor.deployment.port=$publicPort",
         "-P:ktor.deployment.host=127.0.0.1",
+        "-P:security.adminHost=127.0.0.1",
         "-P:security.adminPort=$adminPort",
         "-P:database.url=${PostgresTestSupport.databaseConfig.url}",
         "-P:database.user=${PostgresTestSupport.databaseConfig.user}",
