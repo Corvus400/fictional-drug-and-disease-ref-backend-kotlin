@@ -56,11 +56,23 @@ class ImageRoutesTest {
     }
 
     @Test
-    fun `GET drug image returns not found for missing drug asset`() = testApplication {
+    fun `GET drug image falls back to dosage form image for drugs without a specific asset`() = testApplication {
         withPostgresConfig()
         application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
 
         val response = client.get("/v1/images/drugs/drug_0001")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(ContentType.Image.PNG, response.contentType()?.withoutParameters())
+        assertTrue(response.bodyAsBytes().isNotEmpty())
+    }
+
+    @Test
+    fun `GET drug image returns not found for an unknown drug`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+
+        val response = client.get("/v1/images/drugs/drug_9999")
 
         assertEquals(HttpStatusCode.NotFound, response.status)
         val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())

@@ -1,6 +1,9 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.common
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ApiTag
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ImageStorageConfig
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DrugRepository
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainException
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
@@ -12,6 +15,8 @@ import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import javax.imageio.ImageIO
 
 fun Route.dosageFormImageRoutes() {
@@ -51,10 +56,13 @@ fun Route.dosageFormImageRoutes() {
     }
 }
 
-fun Route.drugImageRoutes() {
+fun Route.drugImageRoutes(
+    repository: DrugRepository,
+    imageStorageConfig: ImageStorageConfig,
+) {
     get("/images/drugs/{drugId}", {
         summary = "医薬品画像を取得する"
-        description = "drug_0080 と drug_0089 の 2 件のみ実在。それ以外は 404。"
+        description = "指定 drugId のアップロード画像、同梱固有画像、剤形既定画像の順で PNG 画像を返す。"
         tags(ApiTag.DRUG.tagName)
         request {
             pathParameter<String>("drugId") {
@@ -82,7 +90,13 @@ fun Route.drugImageRoutes() {
     }) {
         val drugId = checkNotNull(call.parameters["drugId"])
         val size = call.parseImageSize()
-        val bytes = loadImageBytes(resourcePath = "images/drug/$drugId.png", size = size)
+        val drug = when (val result = repository.findByPublicId(drugId)) {
+            is AppResult.Failure -> throw DomainException(result.error)
+            is AppResult.Success -> result.value
+        }
+        val uploadedPath = imageStorageConfig.uploadDir.resolve("$drugId.png").normalize()
+        val bytes = loadImageBytes(filePath = uploadedPath, resourcePath = "images/drug/$drugId.png", size = size)
+            ?: loadImageBytes(resourcePath = "images/dosage_form/${drug.dosageForm.serialName}.png", size = size)
             ?: throw DomainException(DomainError.NotFound(resource = "drug-image", id = drugId))
         call.respondBytes(bytes, ContentType.Image.PNG)
     }
@@ -101,12 +115,16 @@ private fun ApplicationCall.parseImageSize(): ImageSize =
     }
 
 private fun loadImageBytes(
+    filePath: Path? = null,
     resourcePath: String,
     size: ImageSize,
 ): ByteArray? {
-    val originalBytes = Thread.currentThread().contextClassLoader
-        .getResourceAsStream(resourcePath)
-        ?.use { it.readBytes() }
+    val originalBytes = filePath
+        ?.takeIf { Files.isRegularFile(it) }
+        ?.let { Files.readAllBytes(it) }
+        ?: Thread.currentThread().contextClassLoader
+            .getResourceAsStream(resourcePath)
+            ?.use { it.readBytes() }
         ?: return null
     if (size == ImageSize.ORIGINAL) return originalBytes
 

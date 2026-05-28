@@ -1,6 +1,7 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.admin
 
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.AppJson
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ImageStorageConfig
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.parseEtag
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.respondResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DiseaseRepository
@@ -42,6 +43,7 @@ data class WhoAmIResponse(
 fun Route.adminRoutes(
     drugRepository: DrugRepository,
     diseaseRepository: DiseaseRepository,
+    imageStorageConfig: ImageStorageConfig,
 ) {
     get("/whoami") {
         val principal = checkNotNull(call.principal<JWTPrincipal>())
@@ -200,6 +202,40 @@ fun Route.adminRoutes(
             }
         }
     }
+    post("/drugs/{id}/image") {
+        val id = checkNotNull(call.parameters["id"])
+        val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
+            is AppResult.Failure -> return@post call.respondResult(ifMatch)
+            is AppResult.Success -> ifMatch.value
+        }
+        when (val current = drugRepository.findByPublicId(id)) {
+            is AppResult.Failure -> call.respondResult(current)
+            is AppResult.Success -> {
+                when (val imageBytes = call.receivePngUpload(imageStorageConfig.maxUploadBytes)) {
+                    is AppResult.Failure -> call.respondResult(imageBytes)
+                    is AppResult.Success -> {
+                        val imagePath = imageStorageConfig.uploadDir.resolve("$id.png").normalize()
+                        when (val writeResult = writeUploadedImage(imagePath, imageBytes.value)) {
+                            is AppResult.Failure -> call.respondResult(writeResult)
+                            is AppResult.Success -> {
+                                val updatedDrug = current.value.copy(
+                                    revisedAt = currentRevisionDate(),
+                                    imageUrl = "/v1/images/drugs/$id?size=Original",
+                                )
+                                when (val update = drugRepository.update(updatedDrug, expectedUpdatedAt)) {
+                                    is AppResult.Failure -> {
+                                        deleteUploadedImage(imagePath)
+                                        call.respondResult(update)
+                                    }
+                                    is AppResult.Success -> call.respondResult(update)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     delete("/drugs/{id}") {
         val id = checkNotNull(call.parameters["id"])
         val expectedUpdatedAt = when (val ifMatch = call.requireIfMatch()) {
@@ -208,7 +244,12 @@ fun Route.adminRoutes(
         }
         when (val result = drugRepository.delete(id, expectedUpdatedAt)) {
             is AppResult.Failure -> call.respondResult(result)
-            is AppResult.Success -> call.respond(HttpStatusCode.NoContent)
+            is AppResult.Success -> {
+                when (val deleteImage = deleteUploadedImage(imageStorageConfig.uploadDir.resolve("$id.png"))) {
+                    is AppResult.Failure -> call.respondResult(deleteImage)
+                    is AppResult.Success -> call.respond(HttpStatusCode.NoContent)
+                }
+            }
         }
     }
     delete("/diseases/{id}") {

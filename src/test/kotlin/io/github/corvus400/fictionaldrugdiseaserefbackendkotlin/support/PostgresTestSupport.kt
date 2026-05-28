@@ -48,6 +48,8 @@ object PostgresTestSupport {
         jwtSecret: String = "test-secret-please-change",
         rateLimitLimit: Int = 1000,
         rateLimitRefillSeconds: Long = 60,
+        imageUploadDir: String = "build/test-uploads/drugs",
+        imageUploadMaxBytes: Long = 5_242_880,
     ) {
         environment {
             config = MapApplicationConfig(
@@ -66,6 +68,8 @@ object PostgresTestSupport {
                 "security.adminPort" to "80",
                 "security.adminCorsAllowedOrigins" to "",
                 "security.adminTokenTtlSeconds" to "3600",
+                "images.uploadDir" to imageUploadDir,
+                "images.uploadMaxBytes" to imageUploadMaxBytes.toString(),
                 "observability.serviceName" to "drug-disease-api-test",
                 "observability.logLevel" to "INFO",
                 "observability.metricsAllowedCidrs" to "127.0.0.1/32,::1/128",

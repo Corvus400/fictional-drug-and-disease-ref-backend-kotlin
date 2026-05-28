@@ -19,11 +19,13 @@ fun Application.configureDI() {
     val appConfig = loadAppConfig()
     val databaseConfig = loadDatabaseConfig()
     val securityConfig = loadSecurityConfig(appConfig.environment)
+    val imageStorageConfig = loadImageStorageConfig()
     val observabilityConfig = loadObservabilityConfig()
     dependencies {
         provide<AppConfig> { appConfig }
         provide<DatabaseConfig> { databaseConfig }
         provide<SecurityConfig> { securityConfig }
+        provide<ImageStorageConfig> { imageStorageConfig }
         provide<ObservabilityConfig> { observabilityConfig }
         provide<PrometheusMeterRegistry> { PrometheusMeterRegistry(PrometheusConfig.DEFAULT) }
     }
