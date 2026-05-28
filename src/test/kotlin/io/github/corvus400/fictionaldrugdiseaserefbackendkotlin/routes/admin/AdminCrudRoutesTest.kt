@@ -9,6 +9,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.ExposedDrug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.DiseasesTable
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.DrugsTable
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.ProblemDetails
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.moduleWithDatabaseDispatcher
@@ -372,6 +373,89 @@ class AdminCrudRoutesTest {
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
             assertIs<AppResult.Failure>(runBlocking { repository.findByPublicId(created.id) })
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DiseasesTable.deleteWhere { DiseasesTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
+    fun `POST admin drugs returns validation problem for missing required content`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+
+        val response = client.post("/v1/admin/drugs") {
+            bearerAuth(mintToken(scope = "admin"))
+            contentType(ContentType.Application.Json)
+            setBody("""{"brand_name":"管理API不正リクエスト"}""")
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+        assertEquals("body", problem.errors?.single()?.field)
+    }
+
+    @Test
+    fun `POST admin drugs rejects dangling related disease ids`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+
+        val response = client.post("/v1/admin/drugs") {
+            bearerAuth(mintToken(scope = "admin"))
+            contentType(ContentType.Application.Json)
+            setBody(contentOnlyBody(source.copy(relatedDiseaseIds = listOf("disease_9999"))))
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+        assertEquals("related_disease_ids", problem.errors?.single()?.field)
+    }
+
+    @Test
+    fun `PUT admin diseases rejects self references`() = testApplication {
+        withPostgresConfig()
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDiseaseRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Disease>>(
+            runBlocking { repository.findByPublicId("disease_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Disease>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        name = "管理API自己参照検証疾患",
+                        nameKana = "カンリアイピーアイジコサンショウケンショウシッカン",
+                        relatedDrugIds = emptyList(),
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        try {
+            val response = client.put("/v1/admin/diseases/${created.id}") {
+                bearerAuth(mintToken(scope = "admin"))
+                contentType(ContentType.Application.Json)
+                setBody(contentOnlyBody(created.copy(relatedDiseaseIds = listOf(created.id))))
+            }
+
+            assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+            val problem = AppJson.decodeFromString<ProblemDetails>(response.bodyAsText())
+            assertEquals("related_disease_ids", problem.errors?.single()?.field)
         } finally {
             dbQuery(
                 database = PostgresTestSupport.database,

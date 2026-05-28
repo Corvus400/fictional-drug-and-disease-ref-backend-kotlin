@@ -5,9 +5,12 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.respondRe
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DiseaseRepository
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.DrugRepository
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.receive
@@ -52,29 +55,59 @@ fun Route.adminRoutes(
         )
     }
     post("/drugs") {
-        val drug = call.receive<AdminDrugContentRequest>().toDrug(
-            id = "",
-            revisedAt = LocalDate.now().toString(),
-        )
-        call.respondResult(drugRepository.create(drug), successStatus = HttpStatusCode.Created)
+        when (val request = call.receiveAdminContent<AdminDrugContentRequest>()) {
+            is AppResult.Failure -> call.respondResult(request)
+            is AppResult.Success -> {
+                val drug = request.value.toDrug(
+                    id = "",
+                    revisedAt = LocalDate.now().toString(),
+                )
+                call.respondResult(
+                    drug.validateReferences(diseaseRepository)
+                        .thenCreateWith(drugRepository),
+                    successStatus = HttpStatusCode.Created,
+                )
+            }
+        }
     }
     post("/diseases") {
-        val disease = call.receive<AdminDiseaseContentRequest>().toDisease(
-            id = "",
-            revisedAt = LocalDate.now().toString(),
-        )
-        call.respondResult(diseaseRepository.create(disease), successStatus = HttpStatusCode.Created)
+        when (val request = call.receiveAdminContent<AdminDiseaseContentRequest>()) {
+            is AppResult.Failure -> call.respondResult(request)
+            is AppResult.Success -> {
+                val disease = request.value.toDisease(
+                    id = "",
+                    revisedAt = LocalDate.now().toString(),
+                )
+                call.respondResult(
+                    disease.validateReferences(
+                        drugRepository = drugRepository,
+                        diseaseRepository = diseaseRepository,
+                    ).thenCreateWith(diseaseRepository),
+                    successStatus = HttpStatusCode.Created,
+                )
+            }
+        }
     }
     put("/diseases/{id}") {
         val id = checkNotNull(call.parameters["id"])
         when (val current = diseaseRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
-                val disease = call.receive<AdminDiseaseContentRequest>().toDisease(
-                    id = id,
-                    revisedAt = current.value.revisedAt,
-                )
-                call.respondResult(diseaseRepository.update(disease))
+                when (val request = call.receiveAdminContent<AdminDiseaseContentRequest>()) {
+                    is AppResult.Failure -> call.respondResult(request)
+                    is AppResult.Success -> {
+                        val disease = request.value.toDisease(
+                            id = id,
+                            revisedAt = current.value.revisedAt,
+                        )
+                        call.respondResult(
+                            disease.validateReferences(
+                                drugRepository = drugRepository,
+                                diseaseRepository = diseaseRepository,
+                            ).thenUpdateWith(diseaseRepository),
+                        )
+                    }
+                }
             }
         }
     }
@@ -86,8 +119,17 @@ fun Route.adminRoutes(
                 val patch = AppJson.parseToJsonElement(call.receiveText()).jsonObject.withoutServerManagedFields()
                 val currentJson = AppJson.parseToJsonElement(AppJson.encodeToString(current.value)).jsonObject
                 val patchedJson = mergePatch(currentJson, patch)
-                val patched = AppJson.decodeFromString<Disease>(AppJson.encodeToString(patchedJson)).copy(id = id)
-                call.respondResult(diseaseRepository.update(patched))
+                when (val patched = decodeAdminContent<Disease>(patchedJson).mapSuccess { it.copy(id = id) }) {
+                    is AppResult.Failure -> call.respondResult(patched)
+                    is AppResult.Success -> {
+                        call.respondResult(
+                            patched.value.validateReferences(
+                                drugRepository = drugRepository,
+                                diseaseRepository = diseaseRepository,
+                            ).thenUpdateWith(diseaseRepository),
+                        )
+                    }
+                }
             }
         }
     }
@@ -96,11 +138,16 @@ fun Route.adminRoutes(
         when (val current = drugRepository.findByPublicId(id)) {
             is AppResult.Failure -> call.respondResult(current)
             is AppResult.Success -> {
-                val drug = call.receive<AdminDrugContentRequest>().toDrug(
-                    id = id,
-                    revisedAt = current.value.revisedAt,
-                )
-                call.respondResult(drugRepository.update(drug))
+                when (val request = call.receiveAdminContent<AdminDrugContentRequest>()) {
+                    is AppResult.Failure -> call.respondResult(request)
+                    is AppResult.Success -> {
+                        val drug = request.value.toDrug(
+                            id = id,
+                            revisedAt = current.value.revisedAt,
+                        )
+                        call.respondResult(drug.validateReferences(diseaseRepository).thenUpdateWith(drugRepository))
+                    }
+                }
             }
         }
     }
@@ -112,8 +159,14 @@ fun Route.adminRoutes(
                 val patch = AppJson.parseToJsonElement(call.receiveText()).jsonObject.withoutServerManagedFields()
                 val currentJson = AppJson.parseToJsonElement(AppJson.encodeToString(current.value)).jsonObject
                 val patchedJson = mergePatch(currentJson, patch)
-                val patched = AppJson.decodeFromString<Drug>(AppJson.encodeToString(patchedJson)).copy(id = id)
-                call.respondResult(drugRepository.update(patched))
+                when (val patched = decodeAdminContent<Drug>(patchedJson).mapSuccess { it.copy(id = id) }) {
+                    is AppResult.Failure -> call.respondResult(patched)
+                    is AppResult.Success -> {
+                        call.respondResult(
+                            patched.value.validateReferences(diseaseRepository).thenUpdateWith(drugRepository)
+                        )
+                    }
+                }
             }
         }
     }
@@ -160,3 +213,138 @@ private fun mergePatch(
     }
     return JsonObject(merged)
 }
+
+private suspend inline fun <reified T : Any> ApplicationCall.receiveAdminContent(): AppResult<T> =
+    runCatching { receive<T>() }
+        .fold(
+            onSuccess = { AppResult.Success(it) },
+            onFailure = { error ->
+                AppResult.Failure(
+                    DomainError.Validation(
+                        listOf(FieldViolation(field = "body", reason = error.message ?: "Invalid request body")),
+                    ),
+                )
+            },
+        )
+
+private inline fun <reified T : Any> decodeAdminContent(jsonObject: JsonObject): AppResult<T> =
+    runCatching { AppJson.decodeFromString<T>(AppJson.encodeToString(jsonObject)) }
+        .fold(
+            onSuccess = { AppResult.Success(it) },
+            onFailure = { error ->
+                AppResult.Failure(
+                    DomainError.Validation(
+                        listOf(FieldViolation(field = "body", reason = error.message ?: "Invalid request body")),
+                    ),
+                )
+            },
+        )
+
+private inline fun <T : Any, R : Any> AppResult<T>.mapSuccess(transform: (T) -> R): AppResult<R> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> AppResult.Success(transform(value))
+    }
+
+private suspend fun Drug.validateReferences(diseaseRepository: DiseaseRepository): AppResult<Drug> {
+    val violations = mutableListOf<FieldViolation>()
+    val lookupFailure = relatedDiseaseIds.validateExistingIds(
+        field = "related_disease_ids",
+        expectedPrefix = "disease",
+        repositoryFind = diseaseRepository::findByPublicId,
+        violations = violations,
+    )
+    return when {
+        lookupFailure != null -> AppResult.Failure(lookupFailure)
+        violations.isNotEmpty() -> AppResult.Failure(DomainError.Validation(violations))
+        else -> AppResult.Success(this)
+    }
+}
+
+private suspend fun Disease.validateReferences(
+    drugRepository: DrugRepository,
+    diseaseRepository: DiseaseRepository,
+): AppResult<Disease> {
+    val violations = mutableListOf<FieldViolation>()
+    val drugLookupFailure = relatedDrugIds.validateExistingIds(
+        field = "related_drug_ids",
+        expectedPrefix = "drug",
+        repositoryFind = drugRepository::findByPublicId,
+        violations = violations,
+    )
+    val diseaseLookupFailure = relatedDiseaseIds
+        .filterNot { relatedId ->
+            (relatedId == id).also { isSelf ->
+                if (isSelf) {
+                    violations += FieldViolation(
+                        field = "related_disease_ids",
+                        reason = "Disease must not reference itself: $relatedId",
+                    )
+                }
+            }
+        }
+        .validateExistingIds(
+            field = "related_disease_ids",
+            expectedPrefix = "disease",
+            repositoryFind = diseaseRepository::findByPublicId,
+            violations = violations,
+        )
+    return when {
+        drugLookupFailure != null -> AppResult.Failure(drugLookupFailure)
+        diseaseLookupFailure != null -> AppResult.Failure(diseaseLookupFailure)
+        violations.isNotEmpty() -> AppResult.Failure(DomainError.Validation(violations))
+        else -> AppResult.Success(this)
+    }
+}
+
+private suspend fun List<String>.validateExistingIds(
+    field: String,
+    expectedPrefix: String,
+    repositoryFind: suspend (String) -> AppResult<*>,
+    violations: MutableList<FieldViolation>,
+): DomainError? {
+    val pattern = Regex("""$expectedPrefix\_\d{4}""")
+    filterNot { id ->
+        pattern.matches(id).also { matches ->
+            if (!matches) {
+                violations += FieldViolation(field = field, reason = "Invalid $field id: $id")
+            }
+        }
+    }
+    filter { pattern.matches(it) }.forEach { id ->
+        when (val lookup = repositoryFind(id)) {
+            is AppResult.Success -> Unit
+            is AppResult.Failure -> when (lookup.error) {
+                is DomainError.NotFound -> {
+                    violations += FieldViolation(field = field, reason = "Unknown $field id: $id")
+                }
+                else -> return lookup.error
+            }
+        }
+    }
+    return null
+}
+
+private suspend fun AppResult<Drug>.thenCreateWith(repository: DrugRepository): AppResult<Drug> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.create(value)
+    }
+
+private suspend fun AppResult<Drug>.thenUpdateWith(repository: DrugRepository): AppResult<Drug> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.update(value)
+    }
+
+private suspend fun AppResult<Disease>.thenCreateWith(repository: DiseaseRepository): AppResult<Disease> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.create(value)
+    }
+
+private suspend fun AppResult<Disease>.thenUpdateWith(repository: DiseaseRepository): AppResult<Disease> =
+    when (this) {
+        is AppResult.Failure -> this
+        is AppResult.Success -> repository.update(value)
+    }
