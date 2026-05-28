@@ -11,6 +11,7 @@ import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.datetime.CurrentDateTime
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -22,16 +23,25 @@ class ExposedDiseaseRepository(
     private val databaseDispatcher: CoroutineDispatcher,
 ) : DiseaseRepository {
     override suspend fun create(disease: Disease): AppResult<Disease> =
-        queryUnexpectedAsFailure {
-            dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
-                val publicId = nextDiseasePublicId()
-                val created = disease.copy(id = publicId)
-                DiseasesTable.insert {
-                    it[DiseasesTable.publicId] = publicId
-                    it[data] = created
+        run {
+            repeat(PUBLIC_ID_CREATE_MAX_ATTEMPTS) {
+                try {
+                    return dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                        val publicId = nextDiseasePublicId()
+                        val created = disease.copy(id = publicId)
+                        DiseasesTable.insert {
+                            it[DiseasesTable.publicId] = publicId
+                            it[data] = created
+                        }
+                        AppResult.Success(created)
+                    }
+                } catch (e: ExposedSQLException) {
+                    if (!e.isUniqueViolation()) {
+                        return AppResult.Failure(DomainError.Unexpected(e))
+                    }
                 }
-                AppResult.Success(created)
             }
+            AppResult.Failure(DomainError.Unexpected(IllegalStateException("Failed to allocate unique disease id.")))
         }
 
     override suspend fun update(disease: Disease): AppResult<Disease> =
@@ -198,5 +208,8 @@ class ExposedDiseaseRepository(
 
     private companion object {
         const val DISEASE_ID_PREFIX = "disease_"
+        const val PUBLIC_ID_CREATE_MAX_ATTEMPTS = 8
     }
 }
+
+private fun ExposedSQLException.isUniqueViolation(): Boolean = sqlState == "23505"

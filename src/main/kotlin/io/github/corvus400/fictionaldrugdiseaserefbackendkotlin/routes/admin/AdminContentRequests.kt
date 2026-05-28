@@ -11,6 +11,7 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.n
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.nested.SymptomInfo
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.nested.TreatmentInfo
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.buildDrugImageUrl
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.DosageForm
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.RegulatoryClass
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.enums.RouteOfAdministration
@@ -68,7 +69,11 @@ internal data class AdminDrugContentRequest(
     val manufacturer: String,
     val relatedDiseaseIds: List<String> = emptyList(),
 ) {
-    fun toDrug(id: String, revisedAt: String): Drug =
+    fun toDrug(
+        id: String,
+        revisedAt: String,
+        hasUploadedDrugImage: Boolean = false,
+    ): Drug =
         Drug(
             id = id,
             genericName = genericName,
@@ -107,6 +112,11 @@ internal data class AdminDrugContentRequest(
             manufacturer = manufacturer,
             revisedAt = revisedAt,
             relatedDiseaseIds = relatedDiseaseIds,
+            imageUrl = buildDrugImageUrl(
+                drugId = id,
+                dosageForm = dosageForm,
+                hasUploadedDrugImage = hasUploadedDrugImage,
+            ),
         )
 }
 

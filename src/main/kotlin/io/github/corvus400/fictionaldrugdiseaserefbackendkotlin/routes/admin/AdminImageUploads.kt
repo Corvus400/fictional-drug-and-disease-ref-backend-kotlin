@@ -11,6 +11,7 @@ import io.ktor.server.request.receiveMultipart
 import io.ktor.utils.io.toByteArray
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 suspend fun ApplicationCall.receivePngUpload(maxUploadBytes: Long): AppResult<ByteArray> {
     var fileBytes: ByteArray? = null
@@ -45,13 +46,27 @@ suspend fun ApplicationCall.receivePngUpload(maxUploadBytes: Long): AppResult<By
     }
 }
 
-fun writeUploadedImage(
-    imagePath: Path,
+fun writeTempUploadedImage(
+    uploadDir: Path,
+    drugId: String,
     bytes: ByteArray,
+): AppResult<Path> =
+    runCatching {
+        Files.createDirectories(uploadDir)
+        val tempPath = Files.createTempFile(uploadDir, "$drugId-", ".tmp")
+        Files.write(tempPath, bytes)
+        tempPath
+    }.fold(
+        onSuccess = { AppResult.Success(it) },
+        onFailure = { AppResult.Failure(DomainError.Unexpected(it)) },
+    )
+
+fun promoteUploadedImage(
+    tempPath: Path,
+    imagePath: Path,
 ): AppResult<Unit> =
     runCatching {
-        Files.createDirectories(checkNotNull(imagePath.parent))
-        Files.write(imagePath, bytes)
+        Files.move(tempPath, imagePath, StandardCopyOption.REPLACE_EXISTING)
         Unit
     }.fold(
         onSuccess = { AppResult.Success(Unit) },
