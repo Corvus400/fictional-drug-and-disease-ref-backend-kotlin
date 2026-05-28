@@ -76,6 +76,26 @@ class DiseaseRepositoryTest {
     }
 
     @Test
+    fun `create rejects dangling related drug ids inside the repository transaction`() = runBlocking {
+        val source = assertIs<AppResult.Success<Disease>>(repository.findByPublicId("disease_0001")).value
+
+        val result = assertIs<AppResult.Failure>(
+            repository.create(
+                source.copy(
+                    id = "",
+                    name = "テスト不正参照疾患",
+                    nameKana = "テストフセイサンショウシッカン",
+                    relatedDrugIds = listOf("drug_9999"),
+                    relatedDiseaseIds = emptyList(),
+                ),
+            ),
+        )
+
+        val validation = assertIs<DomainError.Validation>(result.error)
+        assertEquals("related_drug_ids", validation.violations.single().field)
+    }
+
+    @Test
     fun `update replaces a persisted disease document`() = runBlocking {
         val source = assertIs<AppResult.Success<Disease>>(repository.findByPublicId("disease_0001")).value
         val created = assertIs<AppResult.Success<Disease>>(
@@ -100,6 +120,36 @@ class DiseaseRepositoryTest {
 
             val found = assertIs<AppResult.Success<Disease>>(repository.findByPublicId(created.id)).value
             assertEquals(replacement, found)
+        } finally {
+            dbQuery(
+                database = PostgresTestSupport.database,
+                databaseDispatcher = PostgresTestSupport.databaseDispatcher
+            ) {
+                DiseasesTable.deleteWhere { DiseasesTable.publicId eq created.id }
+            }
+        }
+    }
+
+    @Test
+    fun `update rejects disease self references inside the repository transaction`() = runBlocking {
+        val source = assertIs<AppResult.Success<Disease>>(repository.findByPublicId("disease_0001")).value
+        val created = assertIs<AppResult.Success<Disease>>(
+            repository.create(
+                source.copy(
+                    id = "",
+                    name = "テスト自己参照疾患",
+                    nameKana = "テストジコサンショウシッカン",
+                    relatedDrugIds = emptyList(),
+                    relatedDiseaseIds = emptyList(),
+                ),
+            ),
+        ).value
+        try {
+            val result = assertIs<AppResult.Failure>(
+                repository.update(created.copy(relatedDiseaseIds = listOf(created.id))),
+            )
+            val validation = assertIs<DomainError.Validation>(result.error)
+            assertEquals("related_disease_ids", validation.violations.single().field)
         } finally {
             dbQuery(
                 database = PostgresTestSupport.database,

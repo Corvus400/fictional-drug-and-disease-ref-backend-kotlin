@@ -5,11 +5,13 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.Diseases
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.data.db.DrugsTable
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.AppResult
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.DomainError
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.FieldViolation
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.datetime.CurrentDateTime
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -29,6 +31,9 @@ class ExposedDrugRepository(
                     return dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
                         val publicId = nextDrugPublicId()
                         val created = drug.copy(id = publicId)
+                        validateReferences(created)?.let { error ->
+                            return@dbQuery AppResult.Failure(error)
+                        }
                         DrugsTable.insert {
                             it[DrugsTable.publicId] = publicId
                             it[data] = created
@@ -47,6 +52,9 @@ class ExposedDrugRepository(
     override suspend fun update(drug: Drug): AppResult<Drug> =
         queryUnexpectedAsFailure {
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                validateReferences(drug)?.let { error ->
+                    return@dbQuery AppResult.Failure(error)
+                }
                 val updatedRows = DrugsTable.update({ DrugsTable.publicId eq drug.id }) {
                     it[data] = drug
                     it[updatedAt] = CurrentDateTime
@@ -65,6 +73,9 @@ class ExposedDrugRepository(
     ): AppResult<Drug> =
         queryUnexpectedAsFailure {
             dbQuery(database = database, databaseDispatcher = databaseDispatcher) {
+                validateReferences(drug)?.let { error ->
+                    return@dbQuery AppResult.Failure(error)
+                }
                 val updatedRows = DrugsTable.update({
                     (DrugsTable.publicId eq drug.id) and (DrugsTable.updatedAt eq expectedUpdatedAt)
                 }) {
@@ -184,9 +195,43 @@ class ExposedDrugRepository(
             .where { DrugsTable.publicId eq publicId }
             .singleOrNull() != null
 
+    private fun validateReferences(drug: Drug): DomainError? {
+        val violations = mutableListOf<FieldViolation>()
+        val validDiseaseIds = drug.relatedDiseaseIds.filter { diseaseId ->
+            DISEASE_ID_PATTERN.matches(diseaseId).also { matches ->
+                if (!matches) {
+                    violations += FieldViolation(
+                        field = RELATED_DISEASE_IDS_FIELD,
+                        reason = "Invalid $RELATED_DISEASE_IDS_FIELD id: $diseaseId",
+                    )
+                }
+            }
+        }
+        if (validDiseaseIds.isNotEmpty()) {
+            val existingDiseaseIds = DiseasesTable
+                .selectAll()
+                .where { DiseasesTable.publicId inList validDiseaseIds }
+                .map { row -> row[DiseasesTable.publicId] }
+                .toSet()
+            validDiseaseIds
+                .filterNot { diseaseId -> diseaseId in existingDiseaseIds }
+                .forEach { diseaseId ->
+                    violations += FieldViolation(
+                        field = RELATED_DISEASE_IDS_FIELD,
+                        reason = "Unknown $RELATED_DISEASE_IDS_FIELD id: $diseaseId",
+                    )
+                }
+        }
+        return violations
+            .takeIf { it.isNotEmpty() }
+            ?.let(DomainError::Validation)
+    }
+
     private companion object {
         const val DRUG_ID_PREFIX = "drug_"
+        const val RELATED_DISEASE_IDS_FIELD = "related_disease_ids"
         const val PUBLIC_ID_CREATE_MAX_ATTEMPTS = 8
+        val DISEASE_ID_PATTERN = Regex("""disease\_\d{4}""")
     }
 }
 

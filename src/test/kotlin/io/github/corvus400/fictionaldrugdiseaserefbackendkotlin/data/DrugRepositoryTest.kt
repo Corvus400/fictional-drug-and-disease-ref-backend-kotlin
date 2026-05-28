@@ -78,6 +78,26 @@ class DrugRepositoryTest {
     }
 
     @Test
+    fun `create rejects dangling related disease ids inside the repository transaction`() = runBlocking {
+        val source = assertIs<AppResult.Success<Drug>>(repository.findByPublicId("drug_0001")).value
+
+        val result = assertIs<AppResult.Failure>(
+            repository.create(
+                source.copy(
+                    id = "",
+                    genericName = "テスト不正参照一般名",
+                    brandName = "テスト不正参照ブランド名",
+                    brandNameKana = "テストフセイサンショウブランドメイ",
+                    relatedDiseaseIds = listOf("disease_9999"),
+                ),
+            ),
+        )
+
+        val validation = assertIs<DomainError.Validation>(result.error)
+        assertEquals("related_disease_ids", validation.violations.single().field)
+    }
+
+    @Test
     fun `update replaces a persisted drug document`() = runBlocking {
         val source = assertIs<AppResult.Success<Drug>>(repository.findByPublicId("drug_0001")).value
         val created = assertIs<AppResult.Success<Drug>>(

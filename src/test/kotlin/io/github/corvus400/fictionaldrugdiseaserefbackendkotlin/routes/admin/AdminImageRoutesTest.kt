@@ -43,6 +43,7 @@ import java.nio.file.Path
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -200,6 +201,19 @@ class AdminImageRoutesTest {
     }
 
     @Test
+    fun `admin image upload streams multipart content to temp file instead of buffering whole file`() {
+        val source = Files.readString(
+            Path.of(
+                "src/main/kotlin/io/github/corvus400/fictionaldrugdiseaserefbackendkotlin/routes/admin/" +
+                    "AdminImageUploads.kt",
+            ),
+        )
+
+        assertFalse(source.contains("toByteArray()"))
+        assertTrue(source.contains("formFieldLimit"))
+    }
+
+    @Test
     fun `DELETE admin drugs removes uploaded image file`() = testApplication {
         val uploadDir = Files.createTempDirectory("drug-image-delete-test")
         withPostgresConfig(imageUploadDir = uploadDir.toString())
@@ -291,6 +305,53 @@ class AdminImageRoutesTest {
             assertTrue(Files.isRegularFile(imagePath))
             assertEquals(originalBytes.toList(), Files.readAllBytes(imagePath).toList())
         } finally {
+            cleanupDrug(created.id, uploadDir)
+        }
+    }
+
+    @Test
+    fun `POST admin drug image keeps database unchanged when final image promotion fails`() = testApplication {
+        val uploadDir = Files.createTempDirectory("drug-image-promote-failure-test")
+        withPostgresConfig(imageUploadDir = uploadDir.toString())
+        application { moduleWithDatabaseDispatcher(databaseDispatcher = PostgresTestSupport.databaseDispatcher) }
+        val repository = ExposedDrugRepository(
+            database = PostgresTestSupport.database,
+            databaseDispatcher = PostgresTestSupport.databaseDispatcher,
+        )
+        val source = assertIs<AppResult.Success<Drug>>(
+            runBlocking { repository.findByPublicId("drug_0001") },
+        ).value
+        val created = assertIs<AppResult.Success<Drug>>(
+            runBlocking {
+                repository.create(
+                    source.copy(
+                        id = "",
+                        genericName = "管理API画像昇格失敗一般名",
+                        brandName = "管理API画像昇格失敗ブランド名",
+                        brandNameKana = "カンリアイピーアイガゾウショウカクシッパイブランドメイ",
+                        relatedDiseaseIds = emptyList(),
+                    ),
+                )
+            },
+        ).value
+        val originalEtag = etagForDrug(created.id)
+        val targetDirectory = uploadDir.resolve("${created.id}.png")
+        Files.createDirectory(targetDirectory)
+        Files.writeString(targetDirectory.resolve("blocker"), "not replaceable by a file")
+        try {
+            val response = client.post("/v1/admin/drugs/${created.id}/image") {
+                bearerAuth(mintToken(scope = "admin"))
+                header(HttpHeaders.IfMatch, originalEtag)
+                setBody(pngMultipartBody())
+            }
+
+            assertEquals(HttpStatusCode.InternalServerError, response.status)
+            val found = assertIs<AppResult.Success<Drug>>(runBlocking { repository.findByPublicId(created.id) }).value
+            assertEquals(created.imageUrl, found.imageUrl)
+            assertEquals(created.revisedAt, found.revisedAt)
+            assertEquals(originalEtag, etagForDrug(created.id))
+        } finally {
+            deleteDirectoryIfExists(targetDirectory)
             cleanupDrug(created.id, uploadDir)
         }
     }
@@ -473,7 +534,15 @@ class AdminImageRoutesTest {
             }
         }
         Files.deleteIfExists(uploadDir.resolve("$id.png"))
-        Files.deleteIfExists(uploadDir)
+        deleteDirectoryIfExists(uploadDir)
+    }
+
+    private fun deleteDirectoryIfExists(path: Path) {
+        if (!Files.isDirectory(path)) return
+        Files.list(path).use { children ->
+            children.forEach { child -> Files.deleteIfExists(child) }
+        }
+        Files.deleteIfExists(path)
     }
 
     private fun cleanupDrugs(ids: List<String>) {
