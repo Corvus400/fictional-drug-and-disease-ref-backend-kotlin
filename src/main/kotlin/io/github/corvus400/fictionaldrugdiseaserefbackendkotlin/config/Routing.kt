@@ -12,6 +12,9 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.common.do
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.common.drugImageRoutes
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.disease.diseaseRoutes
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.drug.drugRoutes
+import io.github.smiley4.ktoropenapi.openApi
+import io.github.smiley4.ktorredoc.redoc
+import io.github.smiley4.ktorswaggerui.swaggerUI
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -90,6 +93,17 @@ fun Application.configureRouting() {
             )
             options("{...}") {
                 call.respond(HttpStatusCode.OK)
+            }
+            // admin spec の閲覧 UI。AdminPortGate により admin ポートでのみ到達可能。
+            // token route と同じ「admin ポート到達=信頼」モデルで JWT 不要。
+            route("/openapi.json") {
+                openApi(ADMIN_SPEC_NAME)
+            }
+            route("/swagger") {
+                swaggerUI("/v1/admin/openapi.json")
+            }
+            route("/redoc") {
+                redoc("/v1/admin/openapi.json")
             }
             adminTokenRoutes(securityConfig)
             authenticate(AUTH_JWT) {

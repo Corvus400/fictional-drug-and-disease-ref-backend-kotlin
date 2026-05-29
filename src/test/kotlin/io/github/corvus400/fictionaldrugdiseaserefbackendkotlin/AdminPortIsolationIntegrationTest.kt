@@ -308,6 +308,86 @@ class AdminPortIsolationIntegrationTest {
         }
     }
 
+    @Test
+    fun `admin connector serves admin openapi spec with admin paths and bearer scheme`() {
+        val publicPort = freePort()
+        val adminPort = freePort()
+        val server = createConfiguredServer(
+            args = testServerArgs(publicPort = publicPort, adminPort = adminPort),
+        )
+
+        try {
+            server.start(wait = false)
+
+            val response = httpClient.send(
+                request("http://127.0.0.1:$adminPort/v1/admin/openapi.json"),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+            val document = AppJson.parseToJsonElement(response.body()).jsonObject
+            val paths = document.getValue("paths").jsonObject.keys
+            val securitySchemes = document.getValue("components").jsonObject
+                .getValue("securitySchemes").jsonObject
+
+            assertEquals(200, response.statusCode())
+            assertEquals(true, paths.any { it.startsWith("/v1/admin") }, paths.toString())
+            assertEquals(
+                "bearer",
+                securitySchemes.getValue("AdminBearer").jsonObject.getValue("scheme").jsonPrimitive.content,
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `public connector hides admin openapi spec and swagger`() {
+        val publicPort = freePort()
+        val adminPort = freePort()
+        val server = createConfiguredServer(
+            args = testServerArgs(publicPort = publicPort, adminPort = adminPort),
+        )
+
+        try {
+            server.start(wait = false)
+
+            val openApiResponse = httpClient.send(
+                request("http://127.0.0.1:$publicPort/v1/admin/openapi.json"),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+            val swaggerResponse = httpClient.send(
+                request("http://127.0.0.1:$publicPort/v1/admin/swagger"),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+            assertEquals(404, openApiResponse.statusCode())
+            assertEquals(404, swaggerResponse.statusCode())
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `admin connector serves admin swagger ui`() {
+        val publicPort = freePort()
+        val adminPort = freePort()
+        val server = createConfiguredServer(
+            args = testServerArgs(publicPort = publicPort, adminPort = adminPort),
+        )
+
+        try {
+            server.start(wait = false)
+
+            val response = httpClient.send(
+                request("http://127.0.0.1:$adminPort/v1/admin/swagger"),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+            assertEquals(true, response.statusCode() != 404, "status=${response.statusCode()}")
+        } finally {
+            server.stop()
+        }
+    }
+
     private fun testServerArgs(
         publicPort: Int,
         adminPort: Int,
