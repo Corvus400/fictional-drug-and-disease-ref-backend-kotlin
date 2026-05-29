@@ -27,6 +27,7 @@ DO NOT use for medical decisions or clinical practice.
 - **実 DB バックの API**: PostgreSQL、Flyway マイグレーション、シードデータを使い、モックベースラインからの移行先として動かせます。
 - **Ktor 3 のプロダクション機能一式**: RFC 9457 形式の problem レスポンス、JWT 管理ルート、CORS、レート制限、構造化ログ、Prometheus メトリクスを備えます。
 - **OpenAPI コントラクトゲート**: `/openapi.json` と `contract/mock-openapi.json` の 2xx レスポンススキーマ互換をテストで確認します。
+- **CMS 連携**: 隣接する [CMS](https://github.com/Corvus400/fictional-drug-and-disease-ref-cms) の編集 UI 向けに admin CRUD WebAPI を提供し、admin コネクタ専用の Swagger / ReDoc で仕様を公開します。詳細は [docs/cms-integration.md](docs/cms-integration.md) を参照してください。
 - **Apple Container ローカルデプロイ**: `scripts/start.sh` で PostgreSQL とアプリを起動し、非 root / read-only rootfs / localhost バインドでローカル検証できます。
 - **公開運用の前提を分離**: 通常起動はローカルのみ、Cloudflare Tunnel 公開は明示フラグで起動する設計です。
 
@@ -45,6 +46,19 @@ curl -s 'http://127.0.0.1:18080/v1/drugs?page=1&page_size=5'
 
 CMS を起動しない場合は `CMS_ENABLED=false ./scripts/start.sh` を使います。CMS チェックアウトの場所が異なる場合は `CMS_DIR=/path/to/fictional-drug-and-disease-ref-cms ./scripts/start.sh` を指定してください。
 
+### ブラウザで確認
+
+- 公開 API (read API, `127.0.0.1:18080`)
+  - Swagger UI: <http://127.0.0.1:18080/swagger>
+  - ReDoc: <http://127.0.0.1:18080/redoc>
+  - OpenAPI JSON: <http://127.0.0.1:18080/openapi.json>
+- 管理 API (admin コネクタ, `127.0.0.1:19090`、CMS 連携用・ローカル限定)
+  - Swagger UI: <http://127.0.0.1:19090/v1/admin/swagger>
+  - ReDoc: <http://127.0.0.1:19090/v1/admin/redoc>
+  - OpenAPI JSON: <http://127.0.0.1:19090/v1/admin/openapi.json>
+
+管理 API の OpenAPI は admin コネクタ (ポート `19090`) でのみ提供され、公開ポート (`18080`) の `/openapi.json` には含まれません。
+
 ## 動作環境
 
 - macOS 26 以降
@@ -55,23 +69,29 @@ CMS を起動しない場合は `CMS_ENABLED=false ./scripts/start.sh` を使い
 
 ## アーキテクチャ
 
-Ktor アプリケーション、PostgreSQL、OpenAPI、Cloudflare Tunnel 公開経路を分離しています。API の詳細は稼働中の OpenAPI を正とし、README は責務境界と運用上の入口だけを記載します。
+Ktor アプリケーション、PostgreSQL、OpenAPI、Cloudflare Tunnel 公開経路、CMS 連携用の admin コネクタを分離しています。公開 API の詳細は稼働中の OpenAPI を正とし、README は責務境界と運用上の入口だけを記載します。read API は公開コネクタ (`18080`)、admin API は loopback 限定の admin コネクタ (`19090`) で物理的に分離します。
 
 ```mermaid
 graph TD
   CLIENT["Flutter / iOS / Android"]
+  CMS["CMS - 管理 UI (ローカル)"]
   TUNNEL["Cloudflare Tunnel - 任意の公開エッジ"]
   APP["Ktor アプリ - ルーティング / セキュリティ / 可観測性"]
+  ADMIN["admin コネクタ 19090 - loopback 限定"]
   SERVICE["クエリサービス - Drug / Disease / Categories"]
   DB["PostgreSQL - Flyway スキーマ + シード"]
   OPENAPI["OpenAPI - /openapi.json / Swagger / ReDoc"]
+  ADMINAPI["admin OpenAPI - /v1/admin/swagger / ReDoc"]
   METRICS["Prometheus メトリクス - CIDR allowlist"]
   CLIENT --> TUNNEL
   CLIENT --> APP
   TUNNEL --> APP
+  CMS --> ADMIN
+  ADMIN --> APP
   APP --> SERVICE
   SERVICE --> DB
   APP --> OPENAPI
+  ADMIN --> ADMINAPI
   APP --> METRICS
 ```
 
@@ -126,6 +146,11 @@ graph TD
 ままです。トークン応答には正準の `access_token` フィールドと、CMS 互換の `token` エイリアスの
 両方が含まれます。
 
+CMS が利用する admin CRUD WebAPI の一覧・リクエスト/レスポンススキーマは、admin コネクタ専用の
+Swagger UI (<http://127.0.0.1:19090/v1/admin/swagger>) / ReDoc を正とします。CMS の起動方法・
+トークンブートストラップ・ETag/If-Match による楽観ロック契約・CORS など連携の詳細は
+[docs/cms-integration.md](docs/cms-integration.md) を参照してください。
+
 ### ローカル動作確認
 
 ```bash
@@ -142,50 +167,23 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/health
 
 ### Cloudflare Tunnel 公開
 
-デフォルトの起動経路はローカルのみです。アプリケーションはホストポートを
-`127.0.0.1:18080` にバインドし、PostgreSQL はホストに公開しません。`18080` の
-ルーターポートフォワードを追加しないでください。公開トラフィックは `cloudflared`
-経由でのみ到達することを想定しています。
-
-初回セットアップ:
+デフォルトの起動経路はローカルのみで、アプリは `127.0.0.1:18080` にバインドします。
+公開する場合は `cloudflared` 経由でのみ到達させる設計で、`18080` のルーターポート
+フォワードは追加しません。
 
 ```bash
+# 初回セットアップ
 TUNNEL_HOSTNAME=fictional-drugref.win ./scripts/setup.sh
-```
 
-`setup.sh` は `cloudflared` のインストールまたは確認を行い、必要に応じて
-Cloudflare のブラウザログインを開き、名前付きトンネル `fictional-drugref-backend`
-を作成または再利用し、ホスト名の DNS をルーティングし、`cloudflared/config.yml` を
-書き出し、Cloudflare の証明書および認証情報ファイルの権限を制限します。
-
-日常運用:
-
-```bash
+# 公開起動 / 停止
 ./scripts/start.sh --public
 ./scripts/stop.sh
 ```
 
-`start.sh --public` は PostgreSQL、Ktor アプリ、バックグラウンドの Cloudflare Tunnel
-プロセスを起動します。公開モード用のランタイム限定のデータベース秘密情報と JWT 秘密情報を
-生成し、一時的な env ファイル経由で注入します。公開モードはデフォルトで `CMS_ENABLED=auto`
-を使います。隣接する CMS チェックアウト・依存関係・`pnpm`・`launchctl` が利用可能であれば
-CMS の開発サーバーも `127.0.0.1:5173` で起動し、そうでなければ CMS 起動のみスキップして
-公開バックエンド/トンネルの起動経路は使える状態に保ちます。CMS 起動を厳密に行う必要がある
-場合は `CMS_ENABLED=true ./scripts/start.sh --public`、意図的に CMS をスキップする場合は
-`CMS_ENABLED=false ./scripts/start.sh --public` を使います。公開エッジの readiness は
-トンネル起動後に報告されます。エッジ readiness チェックの失敗でコマンドを失敗させたい場合は
-`PUBLIC_READINESS_REQUIRED=true` を設定してください。`stop.sh` はトンネル、記録された
-CMS 開発サーバープロセス、ローカルコンテナを停止します。
-
-コミット済みの `cloudflared/config.yml.example` は、他のリクエストを
-`http://localhost:18080` に転送する前に Cloudflare の ingress で `/metrics` を遮断します。
-生成された `cloudflared/config.yml`、トンネル認証情報、PID/ログファイルは Git に含めないで
-ください。認証情報が漏洩した場合はトンネルを失効または再作成してください。
-
-この架空の公開 API では Cloudflare Access を意図的に必須としていません。管理エンドポイントは
-公開トンネル経由でルーティングされず、保護された管理ハンドラには JWT 認証と admin スコープの
-認可も維持されています。実際の機微なデータ・コンプライアンス要件・複数の人間オペレーターを
-扱い始めた場合にのみ、後から Access を追加してください。
+管理エンドポイントは公開トンネル経由でルーティングされず、loopback 限定の admin コネクタに
+留まります。セットアップ手順・公開モードの秘密情報生成・`CMS_ENABLED` の挙動・設定ファイルと
+認証情報の取り扱い・Cloudflare Access の方針など詳細は
+[docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md) を参照してください。
 
 ### コミット前 / push ゲート
 

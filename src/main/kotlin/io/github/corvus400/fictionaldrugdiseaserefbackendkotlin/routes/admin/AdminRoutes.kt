@@ -1,5 +1,7 @@
 package io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.routes.admin
 
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ADMIN_SECURITY_SCHEME
+import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ADMIN_SPEC_NAME
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.AppJson
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.ImageStorageConfig
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.config.parseEtag
@@ -12,6 +14,14 @@ import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.common.Fi
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.disease.Disease
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.Drug
 import io.github.corvus400.fictionaldrugdiseaserefbackendkotlin.domain.drug.buildDrugImageUrl
+import io.github.smiley4.ktoropenapi.config.RequestConfig
+import io.github.smiley4.ktoropenapi.config.ResponsesConfig
+import io.github.smiley4.ktoropenapi.config.RouteConfig
+import io.github.smiley4.ktoropenapi.delete
+import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.patch
+import io.github.smiley4.ktoropenapi.post
+import io.github.smiley4.ktoropenapi.put
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -22,11 +32,6 @@ import io.ktor.server.request.contentType
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.delete
-import io.ktor.server.routing.get
-import io.ktor.server.routing.patch
-import io.ktor.server.routing.post
-import io.ktor.server.routing.put
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -40,13 +45,262 @@ data class WhoAmIResponse(
     val scopes: List<String>,
 )
 
+private val whoAmIDocs: RouteConfig.() -> Unit = {
+    summary = "管理 API トークンの principal を確認する"
+    description = "JWT principal の subject と scope を返す。CMS が管理トークンの有効性確認に使う。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    response {
+        code(HttpStatusCode.OK) {
+            description = "JWT principal 情報"
+            body<WhoAmIResponse>()
+        }
+        code(HttpStatusCode.Unauthorized) {
+            description = "JWT が無効または欠落している"
+        }
+    }
+}
+
+private fun RequestConfig.drugIdPath() {
+    pathParameter<String>("id") { description = "医薬品 ID (`drug_NNNN` 形式)" }
+}
+
+private fun RequestConfig.diseaseIdPath() {
+    pathParameter<String>("id") { description = "疾病 ID (`disease_NNNN` 形式)" }
+}
+
+private fun RequestConfig.ifMatchHeader() {
+    headerParameter<String>("If-Match") {
+        description = "対象リソースの現在の ETag。楽観ロック (楽観的並行制御) のため更新系で必須。"
+        required = true
+    }
+}
+
+private fun ResponsesConfig.validationError() {
+    code(HttpStatusCode.BadRequest) { description = "リクエスト検証エラー (problem+json)" }
+}
+
+private fun ResponsesConfig.authErrors() {
+    code(HttpStatusCode.Unauthorized) { description = "JWT が無効または欠落している" }
+    code(HttpStatusCode.Forbidden) { description = "admin scope が不足している" }
+}
+
+private fun ResponsesConfig.notFoundError() {
+    code(HttpStatusCode.NotFound) { description = "指定 id のリソースが存在しない" }
+}
+
+private fun ResponsesConfig.preconditionError() {
+    code(HttpStatusCode.PreconditionFailed) { description = "If-Match の欠落/不一致 (楽観ロック失敗)" }
+}
+
+private fun ResponsesConfig.mergePatchMediaError() {
+    code(HttpStatusCode.UnsupportedMediaType) {
+        description = "Content-Type が `application/merge-patch+json` でない"
+    }
+}
+
+private val drugCreateDocs: RouteConfig.() -> Unit = {
+    summary = "医薬品を新規作成する"
+    description = "医薬品を新規作成する。id はサーバ側で採番する。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request { body<AdminDrugContentRequest> { description = "作成する医薬品の内容" } }
+    response {
+        code(HttpStatusCode.Created) {
+            description = "作成された医薬品"
+            body<Drug>()
+        }
+        validationError()
+        authErrors()
+    }
+}
+
+private val diseaseCreateDocs: RouteConfig.() -> Unit = {
+    summary = "疾病を新規作成する"
+    description = "疾病を新規作成する。id はサーバ側で採番する。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request { body<AdminDiseaseContentRequest> { description = "作成する疾病の内容" } }
+    response {
+        code(HttpStatusCode.Created) {
+            description = "作成された疾病"
+            body<Disease>()
+        }
+        validationError()
+        authErrors()
+    }
+}
+
+private val drugUpdateDocs: RouteConfig.() -> Unit = {
+    summary = "医薬品を全体更新する"
+    description = "医薬品を全フィールド置換で更新する。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        drugIdPath()
+        ifMatchHeader()
+        body<AdminDrugContentRequest> { description = "置換後の医薬品の内容" }
+    }
+    response {
+        code(HttpStatusCode.OK) {
+            description = "更新された医薬品"
+            body<Drug>()
+        }
+        validationError()
+        authErrors()
+        notFoundError()
+        preconditionError()
+    }
+}
+
+private val diseaseUpdateDocs: RouteConfig.() -> Unit = {
+    summary = "疾病を全体更新する"
+    description = "疾病を全フィールド置換で更新する。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        diseaseIdPath()
+        ifMatchHeader()
+        body<AdminDiseaseContentRequest> { description = "置換後の疾病の内容" }
+    }
+    response {
+        code(HttpStatusCode.OK) {
+            description = "更新された疾病"
+            body<Disease>()
+        }
+        validationError()
+        authErrors()
+        notFoundError()
+        preconditionError()
+    }
+}
+
+private val drugPatchDocs: RouteConfig.() -> Unit = {
+    summary = "医薬品を部分更新する"
+    description = "JSON Merge Patch (RFC 7386) で医薬品を部分更新する。" +
+        "Content-Type は `application/merge-patch+json`。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        drugIdPath()
+        ifMatchHeader()
+        body<AdminDrugContentRequest> { description = "更新したいフィールドのみを含む merge-patch ドキュメント" }
+    }
+    response {
+        code(HttpStatusCode.OK) {
+            description = "更新された医薬品"
+            body<Drug>()
+        }
+        validationError()
+        authErrors()
+        notFoundError()
+        preconditionError()
+        mergePatchMediaError()
+    }
+}
+
+private val diseasePatchDocs: RouteConfig.() -> Unit = {
+    summary = "疾病を部分更新する"
+    description = "JSON Merge Patch (RFC 7386) で疾病を部分更新する。" +
+        "Content-Type は `application/merge-patch+json`。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        diseaseIdPath()
+        ifMatchHeader()
+        body<AdminDiseaseContentRequest> { description = "更新したいフィールドのみを含む merge-patch ドキュメント" }
+    }
+    response {
+        code(HttpStatusCode.OK) {
+            description = "更新された疾病"
+            body<Disease>()
+        }
+        validationError()
+        authErrors()
+        notFoundError()
+        preconditionError()
+        mergePatchMediaError()
+    }
+}
+
+private val drugImageUploadDocs: RouteConfig.() -> Unit = {
+    summary = "医薬品画像をアップロードする"
+    description = "医薬品の画像 (PNG のみ) を multipart で差し替える。" +
+        "フォームフィールド名は `file`。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        drugIdPath()
+        ifMatchHeader()
+        body<ByteArray> {
+            description = "PNG 画像 (multipart/form-data, フィールド名 `file`)"
+            mediaTypes(ContentType.MultiPart.FormData)
+        }
+    }
+    response {
+        code(HttpStatusCode.OK) {
+            description = "画像を更新した医薬品"
+            body<Drug>()
+        }
+        validationError()
+        authErrors()
+        notFoundError()
+        preconditionError()
+        code(HttpStatusCode.UnsupportedMediaType) { description = "PNG 以外の画像形式" }
+    }
+}
+
+private val drugDeleteDocs: RouteConfig.() -> Unit = {
+    summary = "医薬品を削除する"
+    description = "医薬品を削除する。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        drugIdPath()
+        ifMatchHeader()
+    }
+    response {
+        code(HttpStatusCode.NoContent) { description = "削除完了" }
+        authErrors()
+        notFoundError()
+        preconditionError()
+    }
+}
+
+private val diseaseDeleteDocs: RouteConfig.() -> Unit = {
+    summary = "疾病を削除する"
+    description = "疾病を削除する。If-Match による楽観ロック必須。"
+    tags("Admin")
+    specName = ADMIN_SPEC_NAME
+    securitySchemeNames(ADMIN_SECURITY_SCHEME)
+    request {
+        diseaseIdPath()
+        ifMatchHeader()
+    }
+    response {
+        code(HttpStatusCode.NoContent) { description = "削除完了" }
+        authErrors()
+        notFoundError()
+        preconditionError()
+    }
+}
+
 @Suppress("CyclomaticComplexMethod")
 fun Route.adminRoutes(
     drugRepository: DrugRepository,
     diseaseRepository: DiseaseRepository,
     imageStorageConfig: ImageStorageConfig,
 ) {
-    get("/whoami") {
+    get("/whoami", whoAmIDocs) {
         val principal = checkNotNull(call.principal<JWTPrincipal>())
         val scopes = principal.payload.getClaim("scope")
             .asString()
@@ -60,7 +314,7 @@ fun Route.adminRoutes(
             ),
         )
     }
-    post("/drugs") {
+    post("/drugs", drugCreateDocs) {
         when (val request = call.receiveAdminContent<AdminDrugContentRequest>()) {
             is AppResult.Failure -> call.respondResult(request)
             is AppResult.Success -> {
@@ -75,7 +329,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    post("/diseases") {
+    post("/diseases", diseaseCreateDocs) {
         when (val request = call.receiveAdminContent<AdminDiseaseContentRequest>()) {
             is AppResult.Failure -> call.respondResult(request)
             is AppResult.Success -> {
@@ -90,7 +344,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    put("/diseases/{id}") {
+    put("/diseases/{id}", diseaseUpdateDocs) {
         val id = when (val parsedId = call.requireDiseaseId()) {
             is AppResult.Failure -> return@put call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -117,7 +371,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    patch("/diseases/{id}") {
+    patch("/diseases/{id}", diseasePatchDocs) {
         val id = when (val parsedId = call.requireDiseaseId()) {
             is AppResult.Failure -> return@patch call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -151,7 +405,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    put("/drugs/{id}") {
+    put("/drugs/{id}", drugUpdateDocs) {
         val id = when (val parsedId = call.requireDrugId()) {
             is AppResult.Failure -> return@put call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -179,7 +433,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    patch("/drugs/{id}") {
+    patch("/drugs/{id}", drugPatchDocs) {
         val id = when (val parsedId = call.requireDrugId()) {
             is AppResult.Failure -> return@patch call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -221,7 +475,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    post("/drugs/{id}/image") {
+    post("/drugs/{id}/image", drugImageUploadDocs) {
         val id = when (val parsedId = call.requireDrugId()) {
             is AppResult.Failure -> return@post call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -276,7 +530,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    delete("/drugs/{id}") {
+    delete("/drugs/{id}", drugDeleteDocs) {
         val id = when (val parsedId = call.requireDrugId()) {
             is AppResult.Failure -> return@delete call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
@@ -295,7 +549,7 @@ fun Route.adminRoutes(
             }
         }
     }
-    delete("/diseases/{id}") {
+    delete("/diseases/{id}", diseaseDeleteDocs) {
         val id = when (val parsedId = call.requireDiseaseId()) {
             is AppResult.Failure -> return@delete call.respondResult(parsedId)
             is AppResult.Success -> parsedId.value
