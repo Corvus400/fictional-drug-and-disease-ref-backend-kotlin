@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schedule": ["before 9am on monday"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["io.ktor:**", "io.ktor.plugin"],
+      "groupName": "ktor"
+    },
+    {
+      "matchPackageNames": ["io.github.smiley4:**"],
+      "groupName": "smiley4 openapi"
+    }
+  ]
+}
