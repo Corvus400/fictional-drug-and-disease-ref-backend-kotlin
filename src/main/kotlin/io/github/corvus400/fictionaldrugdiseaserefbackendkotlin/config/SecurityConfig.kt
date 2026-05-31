@@ -31,11 +31,11 @@ fun Application.loadSecurityConfig(appEnv: String): SecurityConfig =
         jwtIssuer = resolveConfig("JWT_ISSUER", "security.jwtIssuer", default = "http://localhost:18080"),
         jwtAudience = resolveConfig("JWT_AUDIENCE", "security.jwtAudience", default = "fictional-drug-ref"),
         jwtRealm = resolveConfig("JWT_REALM", "security.jwtRealm", default = "fictional-drug-ref"),
-        rateLimitLimit = resolveConfig("RATE_LIMIT_LIMIT", "security.rateLimitLimit", default = "60").toInt(),
+        rateLimitLimit = resolveConfig("RATE_LIMIT_LIMIT", "security.rateLimitLimit", default = "600").toInt(),
         rateLimitRefillSeconds = resolveConfig(
             "RATE_LIMIT_REFILL_SECONDS",
             "security.rateLimitRefillSeconds",
-            default = "60",
+            default = "30",
         ).toLong(),
         corsAllowedOrigins = parseConfiguredCorsOrigins(
             raw = resolveConfig("CORS_ALLOWED_ORIGINS", "security.corsAllowedOrigins", default = ""),

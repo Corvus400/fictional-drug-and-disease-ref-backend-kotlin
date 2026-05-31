@@ -22,8 +22,8 @@ security:
   jwtIssuer: ${JWT_ISSUER:http://localhost:18080}
   jwtAudience: ${JWT_AUDIENCE:fictional-drug-ref}
   jwtRealm: fictional-drug-ref
-  rateLimitLimit: ${RATE_LIMIT_LIMIT:60}
-  rateLimitRefillSeconds: ${RATE_LIMIT_REFILL_SECONDS:60}
+  rateLimitLimit: ${RATE_LIMIT_LIMIT:600}
+  rateLimitRefillSeconds: ${RATE_LIMIT_REFILL_SECONDS:30}
   corsAllowedOrigins: ${CORS_ALLOWED_ORIGINS:}
   adminHost: ${ADMIN_HOST:127.0.0.1}
   adminPort: ${ADMIN_PORT:19090}
