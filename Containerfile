@@ -1,5 +1,5 @@
 ARG RUNTIME_PLATFORM=linux/amd64
-FROM eclipse-temurin:21.0.10_7-jdk AS build
+FROM eclipse-temurin:21.0.13_9-jdk@sha256:ebfbb18d11ff163ee83b21258acf12248af48d22a0fdfdc68fa1a1516c05976a AS build
 
 WORKDIR /workspace
 
@@ -14,7 +14,7 @@ RUN ./gradlew --no-daemon --max-workers=1 \
     clean buildFatJar \
     && test -f /workspace/build/libs/fictional-drug-and-disease-ref-backend-kotlin-all.jar
 
-FROM --platform=${RUNTIME_PLATFORM} eclipse-temurin:21.0.10_7-jre AS runtime
+FROM --platform=${RUNTIME_PLATFORM} eclipse-temurin:21.0.13_9-jre@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a AS runtime
 
 WORKDIR /app
 
